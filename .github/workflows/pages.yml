@@ -1,0 +1,40 @@
+# Publie la version web installable (PWA) de Sonora sur GitHub Pages à chaque envoi sur la branche main.
+# Prérequis (une seule fois) : Settings > Pages > Source : « GitHub Actions ».
+name: Site web (PWA)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Préparer la version web
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          node scripts/write-build-info.js web
+          sed -i "s/__BUILD__/$VER-${GITHUB_SHA::7}/" www/sw.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: www
+      - id: deploy
+        uses: actions/deploy-pages@v4

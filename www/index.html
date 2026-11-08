@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Sonora</title>
+  <link rel="icon" href="icon.png" />
+  <!-- Version web installable (PWA) -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0e0f14" />
+  <meta name="description" content="Sonora : musique par pays et par style, films, radios du monde entier, favoris et playlists synchronisés." />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Sonora" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Navigation (barre latérale sur ordinateur, barre d'onglets sur iPhone) -->
+    <nav id="nav">
+      <div class="brand"><span class="logo">♪</span><span class="brand-name">Sonora</span></div>
+      <button class="nav-item active" data-view="library"><span class="ico">📚</span><span>Bibliothèque</span></button>
+      <button class="nav-item" data-view="music"><span class="ico">🎵</span><span>Musique</span></button>
+      <button class="nav-item" data-view="films"><span class="ico">🎬</span><span>Films</span></button>
+      <button class="nav-item" data-view="radio"><span class="ico">📻</span><span>Radio</span></button>
+      <button class="nav-item" data-view="youtube"><span class="ico">▶️</span><span>YouTube</span></button>
+      <button class="nav-item" data-view="settings"><span class="ico">⚙️</span><span>Réglages</span></button>
+      <div class="nav-foot">Sans publicité · Hors-ligne</div>
+    </nav>
+
+    <!-- Contenu principal -->
+    <main id="main">
+      <div id="view"></div>
+      <!-- La vue YouTube est gardée en mémoire pour ne pas recharger la page -->
+      <div id="yt-container" class="hidden"></div>
+      <div id="web-container" class="hidden"></div>
+    </main>
+
+    <!-- Mini-lecteur -->
+    <footer id="mini" class="hidden">
+      <div class="mini-progress"><div id="mini-bar"></div></div>
+      <div class="mini-inner">
+        <div class="mini-info" id="mini-open">
+          <img id="mini-cover" alt="" />
+          <div class="mini-text">
+            <div id="mini-title" class="ellipsis">—</div>
+            <div id="mini-artist" class="ellipsis muted">—</div>
+          </div>
+        </div>
+        <div class="mini-ctrl">
+          <button id="mini-prev" class="icon-btn" title="Précédent">⏮</button>
+          <button id="mini-play" class="icon-btn big" title="Lecture/Pause">▶</button>
+          <button id="mini-next" class="icon-btn" title="Suivant">⏭</button>
+        </div>
+        <div class="mini-extra">
+          <span id="mini-time" class="muted small">0:00 / 0:00</span>
+          <input id="mini-vol" type="range" min="0" max="1" step="0.01" value="1" title="Volume" />
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Lecteur plein écran -->
+  <section id="np" class="sheet hidden">
+    <div class="np-head">
+      <button id="np-close" class="icon-btn" title="Réduire">⌄</button>
+      <span class="muted small">EN COURS DE LECTURE</span>
+      <button id="np-video-toggle" class="icon-btn hidden" title="Vidéo">🎬</button>
+    </div>
+    <div class="np-body">
+      <div id="np-media">
+        <img id="np-cover" alt="" />
+        <video id="video-el" playsinline webkit-playsinline preload="metadata" class="hidden"></video>
+        <div id="np-yt-slot" class="hidden"></div>
+      </div>
+      <div class="np-meta">
+        <h2 id="np-title" class="ellipsis">—</h2>
+        <div id="np-artist" class="muted ellipsis">—</div>
+      </div>
+      <div class="np-seek">
+        <span id="np-cur" class="small muted">0:00</span>
+        <input id="np-range" type="range" min="0" max="1000" value="0" />
+        <span id="np-dur" class="small muted">0:00</span>
+      </div>
+      <div class="np-ctrl">
+        <button id="np-shuffle" class="icon-btn" title="Aléatoire">🔀</button>
+        <button id="np-prev" class="icon-btn" title="Précédent">⏮</button>
+        <button id="np-play" class="icon-btn huge" title="Lecture/Pause">▶</button>
+        <button id="np-next" class="icon-btn" title="Suivant">⏭</button>
+        <button id="np-repeat" class="icon-btn" title="Répéter">🔁</button>
+      </div>
+      <div class="np-tools">
+        <button id="np-fav" class="pill">♡ Favori</button>
+        <button id="np-addpl" class="pill">＋ Playlist</button>
+        <select id="np-sleep" class="pill" title="Minuterie de sommeil">
+          <option value="0">⏾ Minuterie : off</option>
+          <option value="15">⏾ 15 min</option>
+          <option value="30">⏾ 30 min</option>
+          <option value="60">⏾ 1 h</option>
+          <option value="end">⏾ Fin du titre</option>
+        </select>
+      </div>
+      <h3 class="np-qh">File d'attente</h3>
+      <div id="np-queue" class="list"></div>
+    </div>
+  </section>
+
+  <div id="modal" class="modal hidden"><div class="modal-card" id="modal-card"></div></div>
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Lecteur YouTube officiel : affiché dans le lecteur plein écran, sinon gardé hors de l'écran -->
+  <div id="yt-host" class="offscreen"></div>
+  <audio id="audio-el" preload="none"></audio>
+  <input id="file-input" type="file" multiple class="hidden"
+    accept="audio/*,video/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.mp4,.m4v,.mov,.webm" />
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

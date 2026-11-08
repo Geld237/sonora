@@ -1,0 +1,79 @@
+{
+  "name": "sonora",
+  "productName": "Sonora",
+  "version": "1.0.0",
+  "description": "Sonora — musique, films, radio et YouTube sans publicité, en ligne et hors-ligne (Windows + iPhone)",
+  "main": "electron/main.js",
+  "author": "Sonora",
+  "license": "MIT",
+  "scripts": {
+    "start": "node scripts/gen-electron-preload.js && electron .",
+    "build:win": "node scripts/gen-electron-preload.js && electron-packager . Sonora --platform=win32 --arch=x64 --out=dist --overwrite --no-asar --app-copyright=Sonora --ignore=^/ios --ignore=^/plugins --ignore=^/dist --ignore=^/scripts --ignore=^/docs --ignore=capacitor.config.json --ignore=^/resources --ignore=^/README",
+    "ios:add": "npx cap add ios && npm run ios:sync",
+    "ios:sync": "node scripts/setup-ios.js && npx cap sync ios",
+    "ios:open": "npx cap open ios",
+    "build:exe": "node scripts/gen-electron-preload.js && electron-builder --win",
+    "android:sync": "node scripts/setup-android.js && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/ios": "^8.6.0",
+    "capacitor-youtube-adblock": "file:plugins/youtube-adblock",
+    "electron-updater": "^6.8.11"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.sonora.app",
+    "productName": "Sonora",
+    "copyright": "Sonora",
+    "directories": {
+      "output": "dist-exe"
+    },
+    "files": [
+      "electron/**",
+      "www/**",
+      "adblock/**",
+      "package.json"
+    ],
+    "asar": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Sonora",
+      "artifactName": "Sonora-Setup-${version}.exe",
+      "language": "1036",
+      "installerLanguages": [
+        "fr_FR"
+      ]
+    },
+    "portable": {
+      "artifactName": "Sonora-Portable-${version}.exe"
+    }
+  }
+}

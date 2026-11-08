@@ -1,0 +1,20 @@
+{
+  "appId": "com.sonora.app",
+  "appName": "Sonora",
+  "webDir": "www",
+  "backgroundColor": "#0e0f14",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0e0f14",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": false
+    }
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0e0f14"
+  }
+}

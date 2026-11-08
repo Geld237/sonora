@@ -1,0 +1,50 @@
+# Compile l'application iPhone sur un Mac de GitHub (gratuit) et fournit un fichier Sonora.ipa
+# à installer depuis Windows avec Sideloadly. Lancement : onglet « Actions » > « Build iOS » > « Run workflow ».
+name: Build iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Choisir la version la plus récente de Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Xcode utilisé : $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Installer les dépendances
+        run: npm ci || npm install
+
+      - name: Préparer le projet iOS
+        run: npm run ios:sync
+
+      - name: Compiler (sans signature, Sideloadly signera l'app)
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry Sonora.ipa Payload
+          ls -lh Sonora.ipa
+
+      - name: Envoyer le fichier Sonora.ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sonora-ipa
+          path: ios/App/Sonora.ipa
+          retention-days: 14
