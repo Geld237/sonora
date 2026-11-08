@@ -1,6 +1,7 @@
 # Publie une nouvelle version de Sonora sur GitHub (Windows, Android, iPhone) en une fois.
 # Lancement : onglet « Actions » > « Release » > « Run workflow » > numéro de version (ex. 1.1.0).
 # Les applications installées détectent ensuite la nouvelle version (voir README).
+# La version web (PWA) est publiée par le workflow « Site web (PWA) » à chaque envoi sur main.
 name: Release
 
 on:
@@ -166,29 +167,3 @@ jobs:
           tag_name: ${{ needs.prepare.outputs.tag }}
           files: Sonora-iPhone-*.ipa
 
-  pages:
-    needs: prepare
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Préparer la version web
-        run: |
-          npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
-          node scripts/write-build-info.js web
-          sed -i "s/__BUILD__/${{ needs.prepare.outputs.version }}-${GITHUB_SHA::7}/" www/sw.js
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: www
-      - id: deploy
-        uses: actions/deploy-pages@v4
