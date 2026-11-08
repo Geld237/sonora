@@ -223,3 +223,29 @@ h2 { font-size: 20px; margin: 22px 0 12px; }
   background: var(--bg3); border: 1px solid var(--accent); border-radius: 14px; padding: 8px 8px 8px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.45); max-width: 94vw; font-weight: 600; font-size: 14px; }
 .update-bar .btn { padding: 8px 14px; font-size: 13px; }
 body.store-build .nav-item[data-view="youtube"] { display: none; }
+
+/* ---------- Windows : onglets en haut (grand écran) ---------- */
+@media (min-width: 761px) {
+  body.platform-electron #app { flex-direction: column; }
+  body.platform-electron #nav { width: auto; height: 62px; flex-direction: row; align-items: center; padding: 0 16px; gap: 2px;
+    border-right: 0; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  body.platform-electron .brand { padding: 0 20px 0 4px; font-size: 20px; }
+  body.platform-electron #nav .logo { width: 32px; height: 32px; font-size: 18px; }
+  body.platform-electron .nav-item { padding: 9px 14px; gap: 8px; }
+  body.platform-electron .nav-item[data-view="about"] { margin-left: auto; }
+  body.platform-electron .nav-foot { display: none; }
+  body.platform-electron #main { flex: 1; min-height: 0; }
+  body.platform-electron #mini { left: 0; }
+}
+
+/* ---------- Infos ---------- */
+.about-hero { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; }
+.about-hero .logo { width: 72px; height: 72px; font-size: 38px; border-radius: 20px; flex-shrink: 0; }
+.about-hero h1 { margin: 0; }
+.about-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.about-grid .set-block { margin: 0; }
+.about-block p, .about-block li { color: var(--muted); line-height: 1.6; font-size: 14px; }
+.about-block ul { padding-left: 18px; margin: 6px 0 0; }
+.author { display: flex; align-items: center; gap: 14px; }
+.author .av { width: 52px; height: 52px; border-radius: 50%; background: var(--grad); display: grid; place-items: center; font-weight: 800; font-size: 20px; color: #fff; flex-shrink: 0; }
+.author a { color: var(--accent2); text-decoration: none; font-weight: 600; }

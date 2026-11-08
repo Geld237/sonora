@@ -377,8 +377,8 @@ async function innertubeSearch(query, { region = 'FR', recent = false } = {}) {
   } catch (e) {
     if (isWebApp()) {
       throw new Error(getYtApiKey()
-        ? 'YouTube a refusé la clé ou son quota du jour est atteint. Réessayez plus tard, ou ajoutez votre propre clé (« ⚙️ Source des titres », en bas de cette page).'
-        : 'Version web : ajoutez une clé API YouTube gratuite pour afficher les titres (« ⚙️ Source des titres », en bas de cette page).');
+        ? 'YouTube a refusé la clé ou son quota du jour est atteint. Réessayez plus tard, ou ajoutez votre propre clé (Réglages → YouTube).'
+        : 'Version web : ajoutez une clé API YouTube gratuite pour afficher les titres (Réglages → YouTube).');
     }
     throw e;
   }

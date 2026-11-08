@@ -20,6 +20,8 @@ concurrency:
 env:
   FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
   FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+  # Sites préconfigurés (onglet Films & TV) : variable ou secret SONORA_SITES, un par ligne « Nom | https://adresse »
+  SONORA_SITES: ${{ vars.SONORA_SITES || secrets.SONORA_SITES }}
 
 jobs:
   deploy:

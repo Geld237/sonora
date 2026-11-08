@@ -381,7 +381,7 @@ async function render(keepScroll = false) {
   $('#yt-container').classList.toggle('hidden', !isYt);
   $('#web-container').classList.toggle('hidden', !isWebPanel);
   view.classList.toggle('hidden', isYt || isWebPanel);
-  const views = { library: viewLibrary, music: viewMusic, album: viewAlbum, films: viewFilms, film: viewFilm, radio: viewRadio, youtube: viewYouTube, playlist: viewPlaylist, web: viewWeb, settings: viewSettings };
+  const views = { library: viewLibrary, music: viewMusic, album: viewAlbum, films: viewFilms, film: viewFilm, radio: viewRadio, youtube: viewYouTube, playlist: viewPlaylist, web: viewWeb, settings: viewSettings, about: viewAbout };
   await views[current.name](current.params, seq);
   if (stale(seq)) return;
   if (keepScroll) view.scrollTop = scroll; else view.scrollTop = 0;
@@ -564,18 +564,7 @@ async function viewMusic(_p, seq) {
     <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${esc(title)}
       <button class="btn" id="yt-playall" style="font-size:14px" disabled>▶ Tout lire</button><button class="btn ghost" id="yt-shuffle" style="font-size:14px" disabled>🔀 Aléatoire</button></h2>
     <div id="res">${y.items ? '' : loadingHtml()}</div>
-    <details class="yt-settings">
-      <summary>⚙️ Source des titres : ${getUserYtApiKey() ? '✅ API officielle YouTube (votre clé)' : hasBuiltInYtKey() ? '✅ API officielle YouTube (clé intégrée)' : 'mode sans clé'}</summary>
-      <p class="muted small">Facultatif. Avec une clé gratuite, Sonora utilise l'API officielle de YouTube (classement officiel des tendances, plus fiable). Sans clé, il utilise l'interface interne de YouTube.</p>
-      <input id="yt-key" placeholder="Collez votre clé API YouTube (AIza…)" value="${esc(getUserYtApiKey())}" />
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="yt-key-save">Enregistrer</button><button class="btn ghost" id="yt-key-del">Supprimer la clé</button></div>
-      <ol>
-        <li>Allez sur console.cloud.google.com et connectez-vous avec un compte Google.</li>
-        <li>Créez un projet (bouton « Nouveau projet »).</li>
-        <li>Menu « API et services » → « Bibliothèque » → cherchez « YouTube Data API v3 » → « Activer ».</li>
-        <li>« API et services » → « Identifiants » → « Créer des identifiants » → « Clé API ». Copiez la clé ici.</li>
-      </ol>
-    </details>`;
+`;
 
   const reload = () => { y.items = null; render(true); };
   view.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { setAudioOnly(b.dataset.mode === 'audio'); updateNowPlaying(); render(true); }));
@@ -594,8 +583,6 @@ async function viewMusic(_p, seq) {
     if (q) { y.mode = 'search'; y.term = q; } else if (y.mode === 'search') y.mode = 'trend';
     reload();
   };
-  $('#yt-key-save').onclick = () => { setYtApiKey($('#yt-key').value); toast(getUserYtApiKey() ? '✅ Clé enregistrée : API officielle activée' : hasBuiltInYtKey() ? 'Clé vide : la clé intégrée de Sonora est utilisée' : 'Clé vide : mode sans clé'); y.items = null; render(true); };
-  $('#yt-key-del').onclick = () => { setYtApiKey(''); toast(hasBuiltInYtKey() ? 'Clé supprimée : la clé intégrée de Sonora est utilisée' : 'Clé supprimée : mode sans clé'); y.items = null; render(true); };
 
   // Les deux sources sont chargées en parallèle ; chacune s'affiche dès qu'elle est prête.
   const loadYt = y.items ? Promise.resolve(y.items) : (
@@ -665,9 +652,9 @@ const FILM_CATS = [
 
 async function viewFilms(_p, seq) {
   const s = cache.films || (cache.films = { term: '', cat: FILM_CATS[0][0], items: null });
-  view.innerHTML = `<h1>Films et séries</h1>
-    <p class="sub">Vos sites de streaming, ouverts dans Sonora avec le bloqueur de publicités et de pop-ups, et des films classiques gratuits.</p>
-    <h2>🌐 Mes sites de streaming</h2>
+  view.innerHTML = `<h1>Films, séries et TV en direct</h1>
+    <p class="sub">Vos sites de films, de séries et de TV en direct, ouverts dans Sonora avec le bloqueur de publicités et de pop-ups, et des films classiques gratuits.</p>
+    <h2>📺 Mes sites : films, séries et TV en direct</h2>
     ${sitesSectionHtml()}
     <h2>🎬 Films classiques <span class="badge ok">GRATUITS · TÉLÉCHARGEABLES</span></h2>
     <form class="searchbar" id="sf"><input id="sq" placeholder="Titre, réalisateur, acteur…" value="${esc(s.term)}" /><button class="btn">Rechercher</button></form>
@@ -894,6 +881,12 @@ function loadSites() {
   } catch (_) {}
   return DEFAULT_SITES.map((x) => ({ ...x }));
 }
+/** Sites préconfigurés par la publication (GitHub : SONORA_SITES). Toujours affichés, non modifiables. */
+function builtInSites() {
+  const mine = new Set(loadSites().map((x) => hostOf(x.url)));
+  return (BUILD.sites || []).map((x, i) => ({ id: `builtin-${i}`, name: x.name, url: x.url, builtIn: true })).filter((x) => !mine.has(hostOf(x.url)));
+}
+
 function saveSites(list, { fromCloud = false } = {}) {
   if (!fromCloud) {
     const before = new Map(loadSites().map((x) => [x.id, x]));
@@ -1004,25 +997,25 @@ function showWebPanel(url) {
 
 /** Section « Mes sites de streaming » (affichée dans l'onglet Films). */
 function sitesSectionHtml() {
-  const sites = loadSites();
+  const sites = [...builtInSites(), ...loadSites()];
   return `
     <form class="searchbar" id="web-go"><input id="web-url" placeholder="Coller un lien : https://…" /><button class="btn">Ouvrir</button></form>
     <button class="btn ghost" id="web-add" style="margin-bottom:16px">＋ Ajouter un site</button>
     ${sites.length ? `<div class="list">${sites.map((st) => `
       <div class="row">
         <div class="rc"><img src="https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostOf(st.url))}" alt="" onerror="this.parentNode.textContent='🌐'"></div>
-        <div class="ri" data-site="${esc(st.id)}"><div class="rt ellipsis">${esc(st.name)}</div><div class="ra ellipsis">${esc(st.url)}</div></div>
+        <div class="ri" data-site="${esc(st.id)}"><div class="rt ellipsis">${esc(st.name)}${st.builtIn ? '<span class="badge">SONORA</span>' : ''}</div><div class="ra ellipsis">${esc(st.url)}</div></div>
         <div class="acts">
           <button class="icon-btn" data-site-open="${esc(st.id)}" title="Ouvrir">▶</button>
-          <button class="icon-btn" data-site-edit="${esc(st.id)}" title="Modifier">✎</button>
-          <button class="icon-btn" data-site-del="${esc(st.id)}" title="Supprimer">🗑</button>
+          ${st.builtIn ? '' : `<button class="icon-btn" data-site-edit="${esc(st.id)}" title="Modifier">✎</button>
+          <button class="icon-btn" data-site-del="${esc(st.id)}" title="Supprimer">🗑</button>`}
         </div>
       </div>`).join('')}</div>` : '<div class="empty"><div class="big">🌐</div>Aucun site. Ajoutez un lien avec le bouton ＋.</div>'}
 `;
 }
 
 function bindSites() {
-  const byId = (id) => loadSites().find((x) => x.id === id);
+  const byId = (id) => [...builtInSites(), ...loadSites()].find((x) => x.id === id);
   $('#web-go').onsubmit = (e) => {
     e.preventDefault();
     const u = normalizeUrl($('#web-url').value);
@@ -1300,7 +1293,17 @@ function viewSettings() {
       <div class="set-row">Affichage par défaut</div>
       ${(() => { const a = getAudioOnly(); return `<div class="opts"><button class="opt ${a ? '' : 'active'}" data-yt-audio="0"><b>🎬 Vidéo</b><span>Le clip est affiché</span></button><button class="opt ${a ? 'active' : ''}" data-yt-audio="1"><b>🎧 Audio seul</b><span>Seulement le son</span></button></div>`; })()}
       <div class="set-row">Source des titres</div>
-      <p class="muted">${getUserYtApiKey() ? '✅ API officielle YouTube (votre clé).' : hasBuiltInYtKey() ? '✅ API officielle YouTube (clé intégrée à Sonora).' : 'Mode sans clé. Pour utiliser l\'API officielle, ajoutez une clé dans Musique → « Source des titres ».'}</p>
+      <p class="muted">${getUserYtApiKey() ? '✅ API officielle YouTube (votre clé).' : hasBuiltInYtKey() ? '✅ API officielle YouTube.' : 'Mode sans clé.'}</p>
+      <details class="yt-settings" style="margin-top:8px">
+        <summary>Utiliser ma propre clé API YouTube (facultatif)</summary>
+        <input id="yt-key" placeholder="Collez votre clé API YouTube (AIza…)" value="${esc(getUserYtApiKey())}" />
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="yt-key-save">Enregistrer</button><button class="btn ghost" id="yt-key-del">Supprimer ma clé</button></div>
+        <ol>
+          <li>console.cloud.google.com → créez un projet.</li>
+          <li>« API et services » → « Bibliothèque » → « YouTube Data API v3 » → « Activer ».</li>
+          <li>« Identifiants » → « Créer des identifiants » → « Clé API », puis collez-la ici.</li>
+        </ol>
+      </details>
     </div>
 
     <div class="set-block"><h3>🎬 Films</h3>
@@ -1323,6 +1326,9 @@ function viewSettings() {
   if (back) back.onclick = () => go('library');
   bindAccountBlock();
   bindUpdatesBlock();
+  const afterKey = () => { if (cache.music?.yt) cache.music.yt.items = null; cloud.touch(); render(true); };
+  $('#yt-key-save').onclick = () => { setYtApiKey($('#yt-key').value); toast(getUserYtApiKey() ? '✅ Clé enregistrée : API officielle activée' : 'Clé vide'); afterKey(); };
+  $('#yt-key-del').onclick = () => { setYtApiKey(''); toast('Clé supprimée'); afterKey(); };
   view.querySelectorAll('[data-set]').forEach((b) => (b.onclick = () => {
     setSetting(b.dataset.set, b.dataset.val);
     cloud.touch();
@@ -1332,6 +1338,60 @@ function viewSettings() {
   }));
   view.querySelectorAll('[data-yt-audio]').forEach((b) => (b.onclick = () => { setAudioOnly(b.dataset.ytAudio === '1'); updateNowPlaying(); render(true); }));
   $('#set-lib').onclick = () => { libTab = 'offline'; go('library'); };
+}
+
+/* =========================================================================
+   Vue : Infos (le projet et son auteur)
+   ========================================================================= */
+function viewAbout() {
+  const repo = BUILD.repo || 'Geld237/sonora';
+  view.innerHTML = `
+    <div class="about-hero"><span class="logo">♪</span>
+      <div><h1>Sonora</h1><div class="muted">Version ${esc(currentVersion())} · Musique, films et radio, sans publicité</div></div>
+    </div>
+
+    <div class="set-block about-block"><h3>💡 Pourquoi Sonora ?</h3>
+      <p>Écouter de la musique et regarder des films ne devrait pas se faire au milieu des publicités, ni dépendre d'un seul appareil.
+      Sonora réunit en une seule application la musique récente de chaque pays et de chaque style, les films, des milliers de radios
+      et vos propres fichiers, sur l'ordinateur, Android et l'iPhone.</p>
+      <p>Le projet s'appuie uniquement sur des sources légales : le lecteur officiel de YouTube, les œuvres du domaine public d'Internet Archive,
+      les flux publics des radios, et vos fichiers personnels. Les artistes restent ainsi rémunérés par les plateformes qui diffusent leurs œuvres.</p>
+    </div>
+
+    <div class="about-grid">
+      <div class="set-block about-block"><h3>✨ Ce que fait l'application</h3>
+        <ul>
+          <li>Tendances, nouveautés et styles musicaux par pays</li>
+          <li>Films classiques gratuits et vos sites de streaming</li>
+          <li>Plus de 40 000 radios du monde entier</li>
+          <li>Bibliothèque hors-ligne, favoris et playlists</li>
+          <li>Compte pour tout synchroniser entre vos appareils</li>
+          <li>Bloqueur de publicités et de pop-ups</li>
+        </ul>
+      </div>
+      <div class="set-block about-block"><h3>🛠 Comment elle est faite</h3>
+        <ul>
+          <li>Un seul code (HTML, CSS, JavaScript) pour toutes les plateformes</li>
+          <li>Windows : Electron · Android et iPhone : Capacitor</li>
+          <li>Version web installable (PWA) sur GitHub Pages</li>
+          <li>Compte et synchronisation : Firebase</li>
+          <li>Publication et mises à jour automatiques avec GitHub Actions</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="set-block about-block" style="margin-top:14px"><h3>👤 Auteur</h3>
+      <div class="author"><div class="av">G</div>
+        <div><b style="color:var(--text)">Geld237</b><br>
+          <a href="https://github.com/Geld237" target="_blank" rel="noopener">github.com/Geld237</a> ·
+          <a href="https://github.com/${esc(repo)}" target="_blank" rel="noopener">code source du projet</a></div>
+      </div>
+    </div>
+
+    <div class="set-block about-block"><h3>🙏 Sources et remerciements</h3>
+      <p>YouTube (lecteur officiel et API YouTube Data) · Internet Archive (films et musique du domaine public) · Radio Browser (annuaire libre des radios) · Firebase (comptes).
+      Sonora n'est affiliée à aucun de ces services.</p>
+    </div>`;
 }
 
 /* =========================================================================

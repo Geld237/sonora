@@ -14,9 +14,16 @@ const info = { version, repo, channel };
 const fbKey = (process.env.FIREBASE_API_KEY || '').trim();
 const fbProject = (process.env.FIREBASE_PROJECT_ID || '').trim();
 if (fbKey && fbProject) info.firebase = { apiKey: fbKey, projectId: fbProject };
+// Sites de streaming préconfigurés (variable ou secret GitHub SONORA_SITES), un par ligne : « Nom | https://adresse »
+const sites = (process.env.SONORA_SITES || '').split(/\r?\n|;/).map((l) => l.trim()).filter(Boolean).map((l) => {
+  const m = l.split('|').map((x) => x.trim());
+  const url = (m.length > 1 ? m[1] : m[0]).replace(/^(?!https?:\/\/)/i, 'https://');
+  try { const u = new URL(url); return { name: m.length > 1 && m[0] ? m[0] : u.hostname.replace(/^www\./, ''), url: u.href }; } catch (_) { return null; }
+}).filter(Boolean);
+if (sites.length) info.sites = sites;
 if (ytKey) info.ytKey = ytKey;
 const out = `// Fichier généré par scripts/write-build-info.js — ne pas modifier à la main.
 export const BUILD = ${JSON.stringify(info)};
 `;
 fs.writeFileSync(path.join(ROOT, 'www', 'js', 'build-info.js'), out);
-console.log(`✓ build-info : version ${version}, dépôt « ${repo || '—'} », canal ${channel}${ytKey ? ', clé YouTube intégrée' : ''}${info.firebase ? ', compte activé' : ''}`);
+console.log(`✓ build-info : version ${version}, dépôt « ${repo || '—'} », canal ${channel}${ytKey ? ', clé YouTube intégrée' : ''}${info.firebase ? ', compte activé' : ''}${info.sites ? `, ${info.sites.length} site(s) préconfiguré(s)` : ''}`);

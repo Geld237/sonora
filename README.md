@@ -170,3 +170,12 @@ L'application s'ouvre même sans connexion et se met à jour toute seule. Ses li
 ### Publier une nouvelle version (méthode simple)
 1. Augmentez `"version"` dans `package.json` (ex. `1.1.0`).
 2. Envoyez ce changement sur la branche **`release`**. Vous pouvez aussi passer par **Actions → Release → Run workflow**.
+
+## Sites préconfigurés (onglet Films & TV)
+
+Pour que des sites apparaissent chez tous les utilisateurs sans qu'ils aient à les ajouter, créez dans GitHub une **variable** (ou un secret) nommée `SONORA_SITES`, dans **Settings → Secrets and variables → Actions**, onglet « Variables » ou « Secrets ». Mettez un site par ligne :
+```
+France TV direct | https://www.france.tv/direct/
+Arte en direct | https://www.arte.tv/fr/direct/
+```
+Ces sites s'affichent avec le badge « SONORA » et ne peuvent pas être supprimés. Les utilisateurs peuvent toujours ajouter leurs propres sites. Les adresses sont intégrées à l'application, donc visibles par tous ses utilisateurs.
