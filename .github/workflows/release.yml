@@ -11,6 +11,8 @@ on:
         required: true
   push:
     tags: ["v*"]
+    # Envoyer la branche « release » publie la version indiquée dans package.json
+    branches: [release]
 
 permissions:
   contents: write
@@ -22,10 +24,13 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       tag: ${{ steps.v.outputs.tag }}
     steps:
+      - uses: actions/checkout@v4
       - id: v
         shell: bash
         run: |
-          RAW="${{ github.event.inputs.version || github.ref_name }}"
+          if [ -n "${{ github.event.inputs.version }}" ]; then RAW="${{ github.event.inputs.version }}";
+          elif [ "${{ github.ref_type }}" = "tag" ]; then RAW="${{ github.ref_name }}";
+          else RAW=$(node -p "require('./package.json').version"); fi
           V="${RAW#v}"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"

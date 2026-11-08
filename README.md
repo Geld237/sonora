@@ -166,3 +166,7 @@ L'application s'ouvre même sans connexion et se met à jour toute seule. Ses li
 - seules les radios en https sont proposées.
 
 **À activer une seule fois** : dans le dépôt GitHub, **Settings → Pages → Source : « GitHub Actions »**.
+
+### Publier une nouvelle version (méthode simple)
+1. Augmentez `"version"` dans `package.json` (ex. `1.1.0`).
+2. Envoyez ce changement sur la branche **`release`**. Vous pouvez aussi passer par **Actions → Release → Run workflow**.
