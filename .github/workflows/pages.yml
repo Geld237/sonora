@@ -28,6 +28,8 @@ jobs:
         with:
           node-version: 22
       - name: Préparer la version web
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: |
           VER=$(node -p "require('./package.json').version")
           node scripts/write-build-info.js web

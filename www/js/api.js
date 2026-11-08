@@ -3,6 +3,7 @@
 //  - Radio Browser (radio-browser.info) : plus de 40 000 radios du monde entier
 
 import { getSettings, markSettingsChanged } from './settings.js';
+import { BUILD } from './build-info.js';
 
 const IA = 'https://archive.org';
 
@@ -250,7 +251,12 @@ export async function radioSearch({ name = '', country = '', tag = '' } = {}) {
    La lecture se fait ensuite avec le lecteur officiel de YouTube.
    ========================================================================= */
 const YT_KEY_STORE = 'sonora.ytApiKey';
-export const getYtApiKey = () => { try { return (localStorage.getItem(YT_KEY_STORE) || '').trim(); } catch (_) { return ''; } };
+/** Clé saisie par l'utilisateur (Réglages) */
+export const getUserYtApiKey = () => { try { return (localStorage.getItem(YT_KEY_STORE) || '').trim(); } catch (_) { return ''; } };
+/** Clé intégrée à la publication (version web) */
+export const hasBuiltInYtKey = () => !!BUILD.ytKey;
+/** Clé utilisée : celle de l'utilisateur en priorité, sinon la clé intégrée */
+export const getYtApiKey = () => getUserYtApiKey() || BUILD.ytKey || '';
 export const setYtApiKey = (k, { silent = false } = {}) => { try { localStorage.setItem(YT_KEY_STORE, (k || '').trim()); } catch (_) {} if (!silent) markSettingsChanged(); };
 
 /** Requête HTTP sans restriction CORS : processus principal (Windows) ou natif (iPhone). */
@@ -369,7 +375,11 @@ async function innertubeSearch(query, { region = 'FR', recent = false } = {}) {
   try {
     d = await httpRequest({ url: INNERTUBE, method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
   } catch (e) {
-    if (isWebApp()) throw new Error('Version web : ajoutez une clé API YouTube gratuite pour afficher les titres (« ⚙️ Source des titres », en bas de cette page).');
+    if (isWebApp()) {
+      throw new Error(getYtApiKey()
+        ? 'YouTube a refusé la clé ou son quota du jour est atteint. Réessayez plus tard, ou ajoutez votre propre clé (« ⚙️ Source des titres », en bas de cette page).'
+        : 'Version web : ajoutez une clé API YouTube gratuite pour afficher les titres (« ⚙️ Source des titres », en bas de cette page).');
+    }
     throw e;
   }
   const out = [];

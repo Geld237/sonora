@@ -1,5 +1,5 @@
 import { db, uid } from './db.js';
-import { iaSearch, musicQuery, filmQuery, iaAlbum, iaFilm, radioSearch, ytTrending, ytNewReleases, ytSearch, getYtApiKey, setYtApiKey, ytMode } from './api.js';
+import { iaSearch, musicQuery, filmQuery, iaAlbum, iaFilm, radioSearch, ytTrending, ytNewReleases, ytSearch, getYtApiKey, getUserYtApiKey, hasBuiltInYtKey, setYtApiKey, ytMode } from './api.js';
 import { ytMedia } from './youtube-player.js';
 import { getSettings, setSetting, markSettingsChanged, settingsChangedAt, SETTINGS_TS_KEY } from './settings.js';
 import * as cloud from './cloud.js';
@@ -565,9 +565,9 @@ async function viewMusic(_p, seq) {
       <button class="btn" id="yt-playall" style="font-size:14px" disabled>▶ Tout lire</button><button class="btn ghost" id="yt-shuffle" style="font-size:14px" disabled>🔀 Aléatoire</button></h2>
     <div id="res">${y.items ? '' : loadingHtml()}</div>
     <details class="yt-settings">
-      <summary>⚙️ Source des titres : ${ytMode() === 'api' ? '✅ API officielle YouTube (clé enregistrée)' : 'mode sans clé'}</summary>
+      <summary>⚙️ Source des titres : ${getUserYtApiKey() ? '✅ API officielle YouTube (votre clé)' : hasBuiltInYtKey() ? '✅ API officielle YouTube (clé intégrée)' : 'mode sans clé'}</summary>
       <p class="muted small">Facultatif. Avec une clé gratuite, Sonora utilise l'API officielle de YouTube (classement officiel des tendances, plus fiable). Sans clé, il utilise l'interface interne de YouTube.</p>
-      <input id="yt-key" placeholder="Collez votre clé API YouTube (AIza…)" value="${esc(getYtApiKey())}" />
+      <input id="yt-key" placeholder="Collez votre clé API YouTube (AIza…)" value="${esc(getUserYtApiKey())}" />
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="yt-key-save">Enregistrer</button><button class="btn ghost" id="yt-key-del">Supprimer la clé</button></div>
       <ol>
         <li>Allez sur console.cloud.google.com et connectez-vous avec un compte Google.</li>
@@ -594,8 +594,8 @@ async function viewMusic(_p, seq) {
     if (q) { y.mode = 'search'; y.term = q; } else if (y.mode === 'search') y.mode = 'trend';
     reload();
   };
-  $('#yt-key-save').onclick = () => { setYtApiKey($('#yt-key').value); toast(getYtApiKey() ? '✅ Clé enregistrée : API officielle activée' : 'Clé vide : mode sans clé'); y.items = null; render(true); };
-  $('#yt-key-del').onclick = () => { setYtApiKey(''); toast('Clé supprimée : mode sans clé'); y.items = null; render(true); };
+  $('#yt-key-save').onclick = () => { setYtApiKey($('#yt-key').value); toast(getUserYtApiKey() ? '✅ Clé enregistrée : API officielle activée' : hasBuiltInYtKey() ? 'Clé vide : la clé intégrée de Sonora est utilisée' : 'Clé vide : mode sans clé'); y.items = null; render(true); };
+  $('#yt-key-del').onclick = () => { setYtApiKey(''); toast(hasBuiltInYtKey() ? 'Clé supprimée : la clé intégrée de Sonora est utilisée' : 'Clé supprimée : mode sans clé'); y.items = null; render(true); };
 
   // Les deux sources sont chargées en parallèle ; chacune s'affiche dès qu'elle est prête.
   const loadYt = y.items ? Promise.resolve(y.items) : (
@@ -1064,7 +1064,7 @@ async function viewWeb() {
    ========================================================================= */
 function localSettingsSnapshot() {
   // updatedAt = 0 sur un appareil où l'on n'a jamais touché aux réglages : ceux du compte s'appliquent alors.
-  return { updatedAt: settingsChangedAt(), values: { settings: getSettings(), audioOnly: getAudioOnly(), ytKey: getYtApiKey() } };
+  return { updatedAt: settingsChangedAt(), values: { settings: getSettings(), audioOnly: getAudioOnly(), ytKey: getUserYtApiKey() } };
 }
 
 cloud.init({
@@ -1309,7 +1309,7 @@ function viewSettings() {
       <div class="set-row">Affichage par défaut</div>
       ${(() => { const a = getAudioOnly(); return `<div class="opts"><button class="opt ${a ? '' : 'active'}" data-yt-audio="0"><b>🎬 Vidéo</b><span>Le clip est affiché</span></button><button class="opt ${a ? 'active' : ''}" data-yt-audio="1"><b>🎧 Audio seul</b><span>Seulement le son</span></button></div>`; })()}
       <div class="set-row">Source des titres</div>
-      <p class="muted">${ytMode() === 'api' ? '✅ API officielle YouTube (clé enregistrée).' : 'Mode sans clé. Pour utiliser l\'API officielle, ajoutez une clé dans Musique → « Source des titres ».'}</p>
+      <p class="muted">${getUserYtApiKey() ? '✅ API officielle YouTube (votre clé).' : hasBuiltInYtKey() ? '✅ API officielle YouTube (clé intégrée à Sonora).' : 'Mode sans clé. Pour utiliser l\'API officielle, ajoutez une clé dans Musique → « Source des titres ».'}</p>
     </div>
 
     <div class="set-block"><h3>🎬 Films</h3>
