@@ -523,6 +523,7 @@ const GENRES = [['', 'Populaires'], ['electronic', 'Électro'], ['hip hop', 'Hip
 
 // Styles musicaux propres à chaque pays (affichés quand on choisit le pays)
 const STYLES_BY_COUNTRY = {
+  WW: ['Pop', 'Hip-hop', 'Afrobeats', 'Latino', 'Reggaeton', 'K-pop', 'R&B', 'Électro', 'Amapiano', 'Rock', 'Gospel'],
   FR: ['Rap français', 'Variété française', 'Pop française', 'Afro trap', 'Électro française', 'R&B français', 'Zouk', 'Drill française'],
   CI: ['Coupé-décalé', 'Zouglou', 'Rap ivoire', 'Afrobeats', 'Gospel ivoirien', 'Ambiance facile'],
   SN: ['Mbalax', 'Rap sénégalais', 'Afrobeats', 'Musique mandingue', 'Gospel'],
@@ -536,11 +537,13 @@ const STYLES_BY_COUNTRY = {
   HT: ['Kompa', 'Rabòday', 'Rap kreyòl', 'Twoubadou', 'Zouk'],
   US: ['Hip-hop', 'R&B', 'Pop', 'Country', 'Rock', 'Latino', 'Gospel'],
   GB: ['UK rap', 'UK drill', 'Pop britannique', 'Grime', 'Rock britannique', 'House'],
+  KM: ['Twarab', 'Musique comorienne', 'M\'godro', 'Rap comorien', 'Afrobeats', 'Gospel'],
+  TG: ['Musique togolaise', 'Rap togolais', 'Afrobeats', 'Agbadja', 'Gospel togolais', 'Coupé-décalé'],
 };
 const YT_MUSIC_CHIPS = STYLES_BY_COUNTRY.FR;
 const stylesFor = (region) => STYLES_BY_COUNTRY[region] || STYLES_BY_COUNTRY.FR;
 
-const YT_REGIONS = [['FR', 'France'], ['CI', "Côte d'Ivoire"], ['SN', 'Sénégal'], ['CM', 'Cameroun'], ['CD', 'RD Congo'], ['BE', 'Belgique'], ['CA', 'Canada'], ['MA', 'Maroc'], ['ML', 'Mali'], ['NG', 'Nigeria'], ['HT', 'Haïti'], ['US', 'États-Unis'], ['GB', 'Royaume-Uni']];
+const YT_REGIONS = [['WW', '🌍 Monde'], ['FR', 'France'], ['CI', "Côte d'Ivoire"], ['SN', 'Sénégal'], ['CM', 'Cameroun'], ['CD', 'RD Congo'], ['BE', 'Belgique'], ['CA', 'Canada'], ['MA', 'Maroc'], ['ML', 'Mali'], ['NG', 'Nigeria'], ['HT', 'Haïti'], ['KM', 'Comores'], ['TG', 'Togo'], ['US', 'États-Unis'], ['GB', 'Royaume-Uni']];
 
 
 /** Onglet Musique : YouTube (titres récents, streaming) + Musique libre (albums téléchargeables) réunis. */
@@ -588,7 +591,7 @@ async function viewMusic(_p, seq) {
   const loadYt = y.items ? Promise.resolve(y.items) : (
     y.mode === 'trend' ? ytTrending(y.region)
       : y.mode === 'new' ? ytNewReleases(y.region)
-      : y.mode === 'genre' ? ytSearch(`${y.genre} ${YT_REGIONS.find((r) => r[0] === y.region)?.[1] || ''} ${new Date().getFullYear()}`, y.region)
+      : y.mode === 'genre' ? ytSearch(`${y.genre} ${y.region === 'WW' ? '' : YT_REGIONS.find((r) => r[0] === y.region)?.[1] || ''} ${new Date().getFullYear()}`.replace(/\s+/g, ' '), y.region)
       : ytSearch(y.term, y.region));
 
   const showYt = (items) => {
@@ -1281,6 +1284,11 @@ function viewSettings() {
   view.innerHTML = `${isMobile ? '<button class="back" id="back">← Bibliothèque</button>' : ''}<h1>Réglages</h1><p class="sub">Les réglages sont enregistrés sur cet appareil et synchronisés avec votre compte.</p>
     ${accountBlockHtml()}
 
+    <div class="set-block"><h3>📺 Mes sites (Films &amp; TV)</h3>
+      <p class="muted">Ajoutez, modifiez ou supprimez les sites qui apparaissent dans l'onglet Films &amp; TV. Ils sont synchronisés avec votre compte.</p>
+      ${sitesSectionHtml()}
+    </div>
+
     <div class="set-block"><h3>🎵 Qualité audio</h3>
       <p class="muted">Pour la musique libre. Une qualité plus haute utilise plus de données et d'espace.</p>
       <div class="set-row">Streaming</div>${opts('streamQuality', QUALITY_OPTS)}
@@ -1326,6 +1334,7 @@ function viewSettings() {
   if (back) back.onclick = () => go('library');
   bindAccountBlock();
   bindUpdatesBlock();
+  bindSites();
   const afterKey = () => { if (cache.music?.yt) cache.music.yt.items = null; cloud.touch(); render(true); };
   $('#yt-key-save').onclick = () => { setYtApiKey($('#yt-key').value); toast(getUserYtApiKey() ? '✅ Clé enregistrée : API officielle activée' : 'Clé vide'); afterKey(); };
   $('#yt-key-del').onclick = () => { setYtApiKey(''); toast('Clé supprimée'); afterKey(); };

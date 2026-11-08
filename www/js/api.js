@@ -326,19 +326,39 @@ async function apiVideos(ids, key) {
 }
 
 async function apiTrending(region, key) {
-  const p = new URLSearchParams({ part: 'snippet,contentDetails,status', chart: 'mostPopular', videoCategoryId: '10', regionCode: region || 'FR', maxResults: '50', hl: 'fr', key });
+  if (!region || region === 'WW') return [];
+  const p = new URLSearchParams({ part: 'snippet,contentDetails,status', chart: 'mostPopular', videoCategoryId: '10', regionCode: region, maxResults: '50', hl: 'fr', key });
   const d = await httpRequest({ url: `${YT_API}/videos?${p}` });
   return (d.items || []).filter((v) => v.status?.embeddable !== false).map((v) => ytTrack({
     id: v.id, title: v.snippet?.title, channel: v.snippet?.channelTitle, duration: parseIsoDuration(v.contentDetails?.duration),
   }));
 }
 
-async function apiSearch(q, { region = 'FR', recent = false } = {}, key) {
-  const p = new URLSearchParams({ part: 'snippet', type: 'video', videoCategoryId: '10', videoEmbeddable: 'true', maxResults: '40', q, regionCode: region, relevanceLanguage: 'fr', key });
-  if (recent) p.set('publishedAfter', new Date(Date.now() - 30 * 86400000).toISOString());
+async function apiSearchOnce(q, { region, recentDays = 0, order = '', category = true }, key) {
+  const p = new URLSearchParams({ part: 'snippet', type: 'video', videoEmbeddable: 'true', maxResults: '40', q, key });
+  if (category) p.set('videoCategoryId', '10');
+  if (region && region !== 'WW') p.set('regionCode', region);
+  if (recentDays) p.set('publishedAfter', new Date(Date.now() - recentDays * 86400000).toISOString());
+  if (order) p.set('order', order);
   const d = await httpRequest({ url: `${YT_API}/search?${p}` });
-  const ids = (d.items || []).map((i) => i.id?.videoId).filter(Boolean);
-  return apiVideos(ids, key); // ajoute les durées
+  return (d.items || []).map((i) => i.id?.videoId).filter(Boolean);
+}
+
+/** Recherche officielle. Si un petit pays ne donne rien, la recherche est élargie pas à pas
+ *  (sans filtre de catégorie, puis sans limite de date, puis sans filtre de pays). */
+async function apiSearch(q, { region = 'FR', recent = false, recentDays = 0, order = '' } = {}, key) {
+  const days = recentDays || (recent ? 30 : 0);
+  const attempts = [
+    { region, recentDays: days, order, category: true },
+    { region, recentDays: days, order, category: false },
+    ...(days ? [{ region, recentDays: 0, order, category: false }] : []),
+    { region: 'WW', recentDays: 0, order, category: false },
+  ];
+  for (const a of attempts) {
+    const ids = await apiSearchOnce(q, a, key);
+    if (ids.length >= 5) return apiVideos(ids, key); // ajoute les durées
+  }
+  return [];
 }
 
 /* ---------- Sans clé : interface interne de YouTube ---------- */
@@ -367,7 +387,7 @@ function collectVideos(node, out, seen) {
 
 async function innertubeSearch(query, { region = 'FR', recent = false } = {}) {
   const body = {
-    context: { client: { clientName: 'WEB', clientVersion: '2.20251105.01.00', hl: 'fr', gl: region || 'FR' } },
+    context: { client: { clientName: 'WEB', clientVersion: '2.20251105.01.00', hl: 'fr', gl: !region || region === 'WW' ? 'US' : region } },
     query,
     params: recent ? SP_VIDEOS_MONTH : SP_VIDEOS,
   };
@@ -387,7 +407,14 @@ async function innertubeSearch(query, { region = 'FR', recent = false } = {}) {
   return out;
 }
 
-const COUNTRY_NAMES = { FR: 'France', CI: "Côte d'Ivoire", SN: 'Sénégal', CM: 'Cameroun', CD: 'Congo', BE: 'Belgique', CA: 'Québec', MA: 'Maroc', ML: 'Mali', NG: 'Nigeria', US: 'USA', GB: 'UK', HT: 'Haïti' };
+const COUNTRY_NAMES = { WW: '', FR: 'France', CI: "Côte d'Ivoire", SN: 'Sénégal', CM: 'Cameroun', CD: 'Congo', BE: 'Belgique', CA: 'Québec', MA: 'Maroc', ML: 'Mali', NG: 'Nigeria', US: 'USA', GB: 'UK', HT: 'Haïti', KM: 'Comores', TG: 'Togo' };
+
+/** Recherche sans clé, élargie si un petit pays ne donne presque rien. */
+async function innertubeWide(query, { region, recent }) {
+  let list = await innertubeSearch(query, { region, recent });
+  if (list.length < 5 && recent) list = await innertubeSearch(query, { region, recent: false });
+  return list;
+}
 
 /* ---------- Fonctions utilisées par l'interface ---------- */
 /** Mode utilisé : 'api' (clé officielle) ou 'interne' */
@@ -395,32 +422,37 @@ export const ytMode = () => (getYtApiKey() ? 'api' : 'interne');
 
 /** Tendances musicales d'un pays. */
 export async function ytTrending(region = 'FR') {
+  const year = new Date().getFullYear();
+  const name = COUNTRY_NAMES[region] || '';
+  const q = region === 'WW' ? `top hits ${year} official music video` : `top hits ${name} ${year} clip officiel`;
   const key = getYtApiKey();
   if (key) {
     try {
-      const list = await apiTrending(region, key);
-      if (list.length) return list;
+      const list = await apiTrending(region, key);              // classement officiel (pas disponible partout)
+      if (list.length >= 5) return list;
+      const found = await apiSearch(q, { region, recentDays: 90, order: 'viewCount' }, key); // sinon : les plus vus des 3 derniers mois
+      if (found.length) return found;
     } catch (e) { console.warn('API YouTube (tendances) :', e.message); }
   }
-  const year = new Date().getFullYear();
-  return innertubeSearch(`top hits ${COUNTRY_NAMES[region] || ''} ${year} clip officiel`, { region, recent: true });
+  return innertubeWide(q, { region, recent: true });
 }
 
 /** Sorties récentes (30 derniers jours), éventuellement d'un genre. */
 export async function ytNewReleases(region = 'FR', genre = '') {
-  const q = `${genre || 'nouveauté musique'} clip officiel`;
+  const name = COUNTRY_NAMES[region] || '';
+  const q = `${genre || (region === 'WW' ? 'new music' : 'nouveauté musique')} ${name} clip officiel`.replace(/\s+/g, ' ').trim();
   const key = getYtApiKey();
   if (key) {
-    try { return await apiSearch(q, { region, recent: true }, key); } catch (e) { console.warn('API YouTube (nouveautés) :', e.message); }
+    try { const l = await apiSearch(q, { region, recent: true, order: 'viewCount' }, key); if (l.length) return l; } catch (e) { console.warn('API YouTube (nouveautés) :', e.message); }
   }
-  return innertubeSearch(q, { region, recent: true });
+  return innertubeWide(q, { region, recent: true });
 }
 
 /** Recherche libre (titre, artiste…). */
 export async function ytSearch(q, region = 'FR') {
   const key = getYtApiKey();
   if (key) {
-    try { return await apiSearch(q, { region }, key); } catch (e) { console.warn('API YouTube (recherche) :', e.message); }
+    try { const l = await apiSearch(q, { region }, key); if (l.length) return l; } catch (e) { console.warn('API YouTube (recherche) :', e.message); }
   }
-  return innertubeSearch(q, { region });
+  return innertubeWide(q, { region, recent: false });
 }
