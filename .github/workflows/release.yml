@@ -112,10 +112,10 @@ jobs:
           npm run android:sync
           cd android && chmod +x gradlew
           if [ -n "$ANDROID_KEYSTORE_PATH" ]; then
-            ./gradlew --no-daemon assembleRelease
+            ./gradlew --no-daemon assembleRelease || (sleep 20 && ./gradlew --no-daemon assembleRelease)
             cp app/build/outputs/apk/release/app-release.apk "../Sonora-Android-$VERSION_NAME.apk"
           else
-            ./gradlew --no-daemon assembleDebug
+            ./gradlew --no-daemon assembleDebug || (sleep 20 && ./gradlew --no-daemon assembleDebug)
             cp app/build/outputs/apk/debug/app-debug.apk "../Sonora-Android-$VERSION_NAME.apk"
           fi
       - name: AAB (version Play Store)
@@ -123,7 +123,7 @@ jobs:
         run: |
           node scripts/write-build-info.js play
           npm run android:sync
-          cd android && ./gradlew --no-daemon bundleRelease
+          cd android && (./gradlew --no-daemon bundleRelease || (sleep 20 && ./gradlew --no-daemon bundleRelease))
           cp app/build/outputs/bundle/release/app-release.aab "../Sonora-PlayStore-$VERSION_NAME.aab"
       - uses: softprops/action-gh-release@v2
         with:
