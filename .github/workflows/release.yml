@@ -18,6 +18,11 @@ on:
 permissions:
   contents: write
 
+# Compte Sonora (Firebase) : identifiants lus dans les secrets du dépôt
+env:
+  FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+  FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+
 jobs:
   prepare:
     runs-on: ubuntu-latest

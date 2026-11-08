@@ -6,6 +6,7 @@
 // (Les fichiers audio/vidéo hors-ligne restent sur chaque appareil : ils sont trop volumineux.)
 
 import { FIREBASE } from './cloud-config.js';
+import { BUILD } from './build-info.js';
 
 const SESSION_KEY = 'sonora.cloud.session';
 const CONFIG_KEY = 'sonora.cloud.config';
@@ -20,13 +21,18 @@ const ls = {
 };
 
 /* ---------- Configuration du projet Firebase ---------- */
+/** Identifiants Firebase : ceux de la publication (secrets GitHub), sinon cloud-config.js, sinon saisis pour un test. */
 export function getConfig() {
+  const b = BUILD.firebase || {};
   const custom = ls.get(CONFIG_KEY, {}) || {};
-  return { apiKey: custom.apiKey || FIREBASE.apiKey || '', projectId: custom.projectId || FIREBASE.projectId || '' };
+  return {
+    apiKey: b.apiKey || FIREBASE.apiKey || custom.apiKey || '',
+    projectId: b.projectId || FIREBASE.projectId || custom.projectId || '',
+  };
 }
 export function setConfig(apiKey, projectId) { ls.set(CONFIG_KEY, { apiKey: (apiKey || '').trim(), projectId: (projectId || '').trim() }); }
 export const isConfigured = () => { const c = getConfig(); return !!(c.apiKey && c.projectId); };
-export const isBuiltInConfig = () => !!(FIREBASE.apiKey && FIREBASE.projectId);
+export const isBuiltInConfig = () => !!((BUILD.firebase?.apiKey && BUILD.firebase?.projectId) || (FIREBASE.apiKey && FIREBASE.projectId));
 
 /* ---------- Session ---------- */
 export const getSession = () => ls.get(SESSION_KEY);

@@ -10,9 +10,13 @@ const repo = process.env.GITHUB_REPOSITORY || '';
 // Les applications Windows / Android / iPhone n'en ont pas besoin (méthode sans clé).
 const ytKey = channel === 'web' ? (process.env.YOUTUBE_API_KEY || '').trim() : '';
 const info = { version, repo, channel };
+// Compte Sonora : identifiants Firebase (secrets GitHub FIREBASE_API_KEY et FIREBASE_PROJECT_ID), pour toutes les versions
+const fbKey = (process.env.FIREBASE_API_KEY || '').trim();
+const fbProject = (process.env.FIREBASE_PROJECT_ID || '').trim();
+if (fbKey && fbProject) info.firebase = { apiKey: fbKey, projectId: fbProject };
 if (ytKey) info.ytKey = ytKey;
 const out = `// Fichier généré par scripts/write-build-info.js — ne pas modifier à la main.
 export const BUILD = ${JSON.stringify(info)};
 `;
 fs.writeFileSync(path.join(ROOT, 'www', 'js', 'build-info.js'), out);
-console.log(`✓ build-info : version ${version}, dépôt « ${repo || '—'} », canal ${channel}${ytKey ? ', clé YouTube intégrée' : ''}`);
+console.log(`✓ build-info : version ${version}, dépôt « ${repo || '—'} », canal ${channel}${ytKey ? ', clé YouTube intégrée' : ''}${info.firebase ? ', compte activé' : ''}`);

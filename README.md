@@ -149,7 +149,7 @@ Le compte permet de retrouver sur l'ordinateur, Android et l'iPhone les **favori
      }
    }
    ```
-4. Dans **⚙ Paramètres du projet → Général**, copiez la **Clé d'API Web** et l'**ID du projet** dans `www/js/cloud-config.js`, puis republiez l'app. Pour un simple essai, vous pouvez aussi les saisir dans **Réglages → Compte** de l'app.
+4. Dans **⚙ Paramètres du projet → Général**, copiez la **Clé d'API Web** et l'**ID du projet**. Ajoutez-les comme secrets du dépôt GitHub (**Settings → Secrets and variables → Actions**) : `FIREBASE_API_KEY` et `FIREBASE_PROJECT_ID`. Elles sont intégrées automatiquement à chaque publication (Windows, Android, iPhone, PWA) : les utilisateurs voient seulement « Créer un compte / Se connecter ».
 
 **Pour les utilisateurs :** dans **Réglages → Compte et synchronisation**, cliquez sur **Créer un compte**, puis connectez-vous avec la même adresse sur chaque appareil.
 

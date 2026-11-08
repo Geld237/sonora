@@ -1,7 +1,7 @@
 {
   "name": "sonora",
   "productName": "Sonora",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Sonora — musique, films, radio et YouTube sans publicité, en ligne et hors-ligne (Windows + iPhone)",
   "main": "electron/main.js",
   "author": "Sonora",

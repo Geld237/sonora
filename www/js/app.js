@@ -1108,17 +1108,8 @@ function accountBlockHtml() {
   const fmtDate = (t) => (t ? new Date(t).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'jamais');
   if (!cloud.isConfigured()) {
     return `<div class="set-block"><h3>👤 Compte et synchronisation</h3>
-      <p class="muted">Connectez-vous avec le même compte sur l'ordinateur, Android et l'iPhone pour retrouver partout vos favoris, playlists, sites et réglages.</p>
-      <p class="muted">Le compte n'est pas encore configuré pour cette version de Sonora. Le développeur renseigne une fois les identifiants Firebase (gratuit) :</p>
-      <ol class="muted small" style="line-height:1.7;padding-left:18px">
-        <li>console.firebase.google.com → « Créer un projet ».</li>
-        <li>Authentication → Commencer → « E-mail/Mot de passe » → Activer.</li>
-        <li>Firestore Database → Créer une base de données → onglet Règles : collez les règles du README → Publier.</li>
-        <li>⚙ Paramètres du projet → copiez la « Clé d'API Web » et l'« ID du projet » ci-dessous.</li>
-      </ol>
-      <input class="set-input" id="fb-key" placeholder="Clé d'API Web (AIza…)" />
-      <input class="set-input" id="fb-pid" placeholder="ID du projet (ex. sonora-12345)" />
-      <button class="btn" id="fb-save">Enregistrer</button></div>`;
+      <p class="muted">Bientôt : un compte Sonora pour retrouver vos favoris, playlists, sites et réglages sur l'ordinateur, Android et l'iPhone.</p>
+      <p class="muted small">Le compte n'est pas encore activé dans cette version.</p></div>`;
   }
   const sess = cloud.getSession();
   if (!sess) {
@@ -1131,7 +1122,7 @@ function accountBlockHtml() {
         <button class="btn ghost" id="ac-signup">Créer un compte</button>
         <button class="btn ghost" id="ac-reset">Mot de passe oublié</button>
       </div>
-      ${cloud.isBuiltInConfig() ? '' : '<p class="muted small" style="margin-top:12px"><a href="#" id="fb-reset" style="color:var(--muted)">Modifier la configuration Firebase</a></p>'}</div>`;
+      </div>`;
   }
   return `<div class="set-block"><h3>👤 Compte et synchronisation</h3>
     <p class="muted">Connecté : <b style="color:var(--text)">${esc(sess.email)}</b><br>Dernière synchronisation : ${fmtDate(cloud.lastSync())}</p>
