@@ -1,0 +1,6 @@
+Enora
+Copyright (c) 2026 Geld237 — code sous licence MIT (voir LICENSE).
+
+Composants tiers :
+- Police Inter (www/fonts) : SIL Open Font License 1.1, voir www/fonts/LICENSE-Inter-OFL.txt
+- Electron, Capacitor et les autres dépendances npm : sous leurs propres licences (voir node_modules)
