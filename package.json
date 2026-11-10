@@ -4,7 +4,7 @@
   "version": "1.2.0",
   "description": "Enora — musique, films, radio et YouTube sans publicité, en ligne et hors-ligne (Windows + iPhone)",
   "main": "electron/main.js",
-  "author": "Enora",
+  "author": "Geld237",
   "license": "MIT",
   "scripts": {
     "start": "node scripts/gen-electron-preload.js && electron .",
@@ -13,7 +13,8 @@
     "ios:sync": "node scripts/setup-ios.js && npx cap sync ios",
     "ios:open": "npx cap open ios",
     "build:exe": "node scripts/gen-electron-preload.js && electron-builder --win",
-    "android:sync": "node scripts/setup-android.js && npx cap sync android"
+    "android:sync": "node scripts/setup-android.js && npx cap sync android",
+    "check": "node scripts/check.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",
@@ -75,5 +76,13 @@
     "portable": {
       "artifactName": "Enora-Portable-${version}.exe"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Geld237/sonora.git"
+  },
+  "homepage": "https://geld237.github.io/sonora/",
+  "bugs": {
+    "url": "https://github.com/Geld237/sonora/issues"
   }
 }

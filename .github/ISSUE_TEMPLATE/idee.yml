@@ -1,0 +1,21 @@
+name: Proposer une idée
+description: Une nouvelle fonctionnalité ou une amélioration
+labels: ["amélioration"]
+body:
+  - type: textarea
+    id: probleme
+    attributes:
+      label: Quel besoin cette idée résout-elle ?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution proposée
+  - type: checkboxes
+    id: regles
+    attributes:
+      label: Règles du projet
+      options:
+        - label: Cette idée n'utilise que des sources légales (voir CONTRIBUTING.md).
+          required: true

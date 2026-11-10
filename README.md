@@ -1,5 +1,9 @@
 # Enora — musique, films, radio et YouTube sans publicité
 
+[![Vérifications](https://github.com/Geld237/sonora/actions/workflows/ci.yml/badge.svg)](https://github.com/Geld237/sonora/actions/workflows/ci.yml) · Licence MIT · [Contribuer](CONTRIBUTING.md) · [Version web](https://geld237.github.io/sonora/) · [Télécharger](https://github.com/Geld237/sonora/releases/latest)
+
+> **Les contributions sont les bienvenues !** Lisez le [guide de contribution](CONTRIBUTING.md) pour installer le projet en 5 minutes et proposer une amélioration.
+
 Application d'écoute **en ligne et hors-ligne** pour **Windows** et **iPhone** (un seul code).
 
 ## Fonctionnalités

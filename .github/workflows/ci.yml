@@ -1,0 +1,30 @@
+# Vérifications lancées automatiquement sur chaque proposition de modification (Pull Request).
+# Aucun secret n'est utilisé : elles fonctionnent aussi pour les contributeurs externes.
+name: Vérifications
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Installer
+        run: npm ci --ignore-scripts
+      - name: Vérifier le code
+        run: npm run check
+      - name: Préparer les versions (sans compiler)
+        run: |
+          node scripts/write-build-info.js github
+          node scripts/gen-electron-preload.js
+          node scripts/setup-ios.js
+          node scripts/setup-android.js
