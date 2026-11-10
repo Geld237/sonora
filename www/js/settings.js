@@ -4,6 +4,8 @@ const DEFAULTS = {
   streamQuality: 'normal',   // low | normal | high  — musique libre en streaming
   downloadQuality: 'high',   // low | normal | high  — musique libre téléchargée
   filmDownload: 'light',     // light | high         — films téléchargés
+  eq: 'off',                 // égaliseur (fichiers sur l'appareil)
+  normalize: 'off',          // normalisation du volume : on | off
 };
 
 export function getSettings() {

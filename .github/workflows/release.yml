@@ -50,6 +50,8 @@ jobs:
           body: |
             ## Télécharger Enora ${{ steps.v.outputs.version }}
             - **Windows** : `Enora-Setup-${{ steps.v.outputs.version }}.exe` (installateur, mises à jour automatiques) ou `Enora-Portable-${{ steps.v.outputs.version }}.exe`
+            - **Mac** (Intel et Apple Silicon) : `Enora-Mac-${{ steps.v.outputs.version }}.dmg` — 1er lancement : clic droit sur Enora > Ouvrir
+            - **Linux** : `Enora-Linux-${{ steps.v.outputs.version }}.AppImage` (mises à jour automatiques) ou `.deb`
             - **Android** : `Enora-Android-${{ steps.v.outputs.version }}.apk` (autorisez « Installer des applis inconnues »)
             - **iPhone** : `Enora-iPhone-${{ steps.v.outputs.version }}.ipa`, à installer avec Sideloadly depuis Windows (voir README)
             - **Play Store** : `Enora-PlayStore-${{ steps.v.outputs.version }}.aab`, à envoyer dans la Google Play Console
@@ -81,6 +83,54 @@ jobs:
             dist-exe/*.exe
             dist-exe/*.blockmap
             dist-exe/latest.yml
+
+  mac:
+    needs: prepare
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Version
+        run: |
+          npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
+          node scripts/write-build-info.js github
+      - run: npm ci
+      - name: "Compiler l'application Mac (Intel + Apple Silicon)"
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run build:mac -- --publish never -c.publish.provider=github -c.publish.owner=${{ github.repository_owner }} -c.publish.repo=${{ github.event.repository.name }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          files: |
+            dist-exe/*.dmg
+            dist-exe/*.zip
+            dist-exe/latest-mac.yml
+
+  linux:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Version
+        run: |
+          npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
+          node scripts/write-build-info.js github
+      - run: npm ci
+      - name: "Compiler l'application Linux (AppImage + deb)"
+        run: npm run build:linux -- --publish never -c.publish.provider=github -c.publish.owner=${{ github.repository_owner }} -c.publish.repo=${{ github.event.repository.name }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          files: |
+            dist-exe/*.AppImage
+            dist-exe/*.deb
+            dist-exe/latest-linux.yml
 
   android:
     needs: prepare

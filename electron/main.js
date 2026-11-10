@@ -6,7 +6,10 @@ const { pathToFileURL } = require('url');
 // Mises à jour automatiques (installateur Windows, depuis GitHub Releases)
 let autoUpdater = null;
 try { ({ autoUpdater } = require('electron-updater')); } catch (_) { autoUpdater = null; }
-const canAutoUpdate = () => !!(autoUpdater && app.isPackaged && !process.env.PORTABLE_EXECUTABLE_DIR);
+// Mise à jour automatique : installateur Windows et AppImage Linux.
+// Mac : l'application n'est pas signée par Apple, macOS refuse donc l'installation automatique -> bandeau « Nouvelle version ».
+const canAutoUpdate = () => !!(autoUpdater && app.isPackaged && !process.env.PORTABLE_EXECUTABLE_DIR
+  && (process.platform === 'win32' || (process.platform === 'linux' && process.env.APPIMAGE)));
 
 const ROOT = path.join(__dirname, '..');
 const WWW = path.join(ROOT, 'www');

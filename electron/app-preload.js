@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 if (process.isMainFrame) {
   contextBridge.exposeInMainWorld('sonora', {
     platform: 'electron',
+    os: process.platform, // win32 | darwin | linux
     // Requêtes vers YouTube sans restriction CORS (faites par le processus principal)
     http: (req) => ipcRenderer.invoke('sonora:http', req),
     // Mises à jour automatiques

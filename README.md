@@ -21,6 +21,15 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.3.0 (inspirées du [benchmark](docs/BENCHMARK.md))
+- **Paroles synchronisées** : importez `Titre.mp3` et `Titre.lrc` ensemble, ou ajoutez le `.lrc` depuis le lecteur.
+- **Égaliseur** (6 préréglages) et **normalisation du volume** pour vos fichiers.
+- **Historique et statistiques** d'écoute (Bibliothèque → Historique).
+- **File d'attente → playlist** en un clic.
+- **Recherche globale** : Ctrl+K (⌘K sur Mac).
+- **Sauvegarde et restauration** de vos données dans un fichier (Réglages → Sauvegarde).
+- Versions **Mac** et **Linux**.
+
 ## Le bloqueur de publicités
 
 1. **Blocage réseau** : les requêtes vers les serveurs publicitaires (doubleclick.net, googlesyndication.com, youtube.com/pagead, /api/stats/ads…) sont annulées avant de partir.
@@ -41,6 +50,17 @@ npm install
 npm start            # lance l'application
 npm run build:win    # recrée Enora.exe dans dist/
 ```
+
+## Installer sur Mac
+
+Téléchargez `Enora-Mac-x.y.z.dmg` depuis la page **Releases**. Il fonctionne sur les Mac Intel comme sur Apple Silicon (M1, M2, M3…). Ouvrez-le, puis glissez Enora dans **Applications**.
+Au premier lancement, macOS signale un « développeur non identifié », parce que l'app n'est pas signée par Apple : faites un **clic droit sur Enora → Ouvrir → Ouvrir**. Si macOS bloque encore, allez dans **Réglages Système → Confidentialité et sécurité → Ouvrir quand même**.
+Les nouvelles versions sont proposées dans l'app par un bandeau « Nouvelle version ».
+
+## Installer sur Linux
+
+- **AppImage** (toutes distributions) : `chmod +x Enora-Linux-x.y.z.AppImage`, puis lancez-le. Les mises à jour sont automatiques.
+- **Debian / Ubuntu** : `sudo apt install ./Enora-Linux-x.y.z.deb`.
 
 ## Lancer sur iPhone (Mac + Xcode obligatoires)
 

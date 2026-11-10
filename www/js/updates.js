@@ -28,7 +28,10 @@ export async function checkForUpdate({ force = false } = {}) {
   const assets = rel.assets || [];
   const pick = (re) => assets.find((a) => re.test(a.name))?.browser_download_url;
   const url = platform === 'android' ? (pick(/\.apk$/i) || rel.html_url)
-    : platform === 'electron' ? (pick(/portable.*\.exe$/i) || pick(/setup.*\.exe$/i) || rel.html_url)
+    : platform === 'electron' ? ({
+      darwin: pick(/mac.*\.dmg$/i),
+      linux: pick(/\.AppImage$/i) || pick(/\.deb$/i),
+    }[window.sonora?.os] || pick(/portable.*\.exe$/i) || pick(/setup.*\.exe$/i) || rel.html_url)
     : rel.html_url; // iPhone : page de la version (fichier .ipa à réinstaller avec Sideloadly)
   return { version, url, page: rel.html_url, notes: (rel.body || '').slice(0, 400) };
 }

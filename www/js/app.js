@@ -6,7 +6,7 @@ import * as cloud from './cloud.js';
 import { BUILD } from './build-info.js';
 import { I, ic } from './icons.js';
 import { checkForUpdate, skipVersion, currentVersion } from './updates.js';
-import { player, videoElement } from './player.js';
+import { player, videoElement, EQ_PRESETS, setAudioEffects } from './player.js';
 import { platform, isMobile, openYouTubeNative, openWebNative } from './platform.js';
 
 /* =========================================================================
@@ -125,13 +125,38 @@ fileInput.addEventListener('change', async () => {
 });
 
 function guessKind(file) {
+  if (/\.(lrc|txt)$/i.test(file.name)) return null;
   if (file.type.startsWith('video/')) return 'video';
   if (file.type.startsWith('audio/')) return 'audio';
   return /\.(mp4|m4v|mov|webm|mkv)$/i.test(file.name) ? 'video' : /\.(mp3|m4a|aac|wav|flac|ogg|opus)$/i.test(file.name) ? 'audio' : null;
 }
 
+/** Paroles synchronisées (format .lrc) ou texte simple : [{ t: secondes, text }] */
+function parseLyrics(raw) {
+  const lines = [];
+  let timed = false;
+  for (const line of String(raw || '').split(/\r?\n/)) {
+    const stamps = [...line.matchAll(/\[(\d{1,2}):(\d{2}(?:[.:]\d{1,3})?)\]/g)];
+    const text = line.replace(/\[[^\]]*\]/g, '').trim();
+    if (stamps.length) {
+      timed = true;
+      for (const m of stamps) lines.push({ t: +m[1] * 60 + parseFloat(m[2].replace(':', '.')), text });
+    } else if (text && !/^\[[a-z]+:/i.test(line)) lines.push({ t: null, text });
+  }
+  return { timed, lines: timed ? lines.filter((l) => l.t != null).sort((a, b) => a.t - b.t) : lines };
+}
+const baseName = (n) => n.replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim().toLowerCase();
+
 async function importFiles(files) {
   let ok = 0;
+  // Fichiers de paroles (.lrc / .txt) déposés avec la musique : associés par nom de fichier
+  const lyricFiles = new Map();
+  for (const f of files) if (/\.(lrc|txt)$/i.test(f.name)) lyricFiles.set(baseName(f.name), f);
+  let lyricsAdded = 0;
+  for (const [key, f] of lyricFiles) {
+    const m = state.media.find((x) => baseName(x.fileName || '') === key || `${x.artist} - ${x.title}`.toLowerCase() === key || x.title.toLowerCase() === key);
+    if (m && !files.some((x) => !/\.(lrc|txt)$/i.test(x.name) && baseName(x.name) === key)) { m.lyrics = await f.text(); await db.put('media', m); lyricsAdded++; }
+  }
   for (const file of files) {
     const kind = guessKind(file);
     if (!kind) continue;
@@ -143,7 +168,9 @@ async function importFiles(files) {
     const id = uid();
     try {
       await db.put('blobs', { id, blob: file });
-      await db.put('media', { id, title, artist, kind, origin: 'local', size: file.size, addedAt: Date.now() });
+      const lrc = lyricFiles.get(baseName(file.name));
+      await db.put('media', { id, title, artist, kind, origin: 'local', size: file.size, addedAt: Date.now(), fileName: file.name, lyrics: lrc ? await lrc.text() : '' });
+      if (lrc) lyricsAdded++;
       ok++;
     } catch (e) {
       console.error(e);
@@ -151,7 +178,7 @@ async function importFiles(files) {
     }
   }
   await loadState();
-  toast(ok ? `${ok} fichier(s) ajouté(s) à votre bibliothèque` : 'Aucun fichier audio/vidéo reconnu');
+  toast(ok || lyricsAdded ? [ok ? `${ok} fichier(s) ajouté(s)` : '', lyricsAdded ? `paroles ajoutées à ${lyricsAdded} titre(s)` : ''].filter(Boolean).join(' · ') : 'Aucun fichier audio/vidéo reconnu');
   if (current.name === 'library') render();
 }
 
@@ -365,6 +392,123 @@ view.addEventListener('click', async (e) => {
 });
 
 /* =========================================================================
+   Recherche globale (Ctrl+K / ⌘K) : bibliothèque, favoris, playlists, sites, historique
+   ========================================================================= */
+function openGlobalSearch() {
+  const card = modal(`<div class="gs"><div class="gs-in">${I.search}<input id="gs-q" placeholder="Rechercher dans Enora…" autocomplete="off" /></div><div id="gs-res" class="gs-res"></div>
+    <p class="muted small" style="margin:10px 2px 0">Entrée : chercher le titre en ligne dans Musique · Échap : fermer</p></div>`);
+  card.classList.add('gs-card');
+  const input = $('#gs-q', card);
+  const res = $('#gs-res', card);
+  let items = [];
+  const run = () => {
+    const q = fold(input.value.trim());
+    if (!q) { res.innerHTML = ''; items = []; return; }
+    const hit = (txt) => fold(txt).includes(q);
+    const tracks = [
+      ...state.media.map(mediaToTrack),
+      ...[...state.favs.values()].filter((f) => f.type === 'track' || f.type === 'radio').map((f) => hydrate(f.data)),
+      ...getHistory().map((x) => hydrate(x.track)),
+    ];
+    const seen = new Set();
+    const t = tracks.filter((x) => hit(`${x.title} ${x.artist}`) && !seen.has(x.key) && seen.add(x.key)).slice(0, 8);
+    const pls = state.playlists.filter((p) => hit(p.name)).slice(0, 4);
+    const sites = [...builtInSites(), ...loadSites()].filter((x) => hit(`${x.name} ${x.url}`)).slice(0, 4);
+    items = [...t.map((x) => ({ type: 'track', x })), ...pls.map((x) => ({ type: 'pl', x })), ...sites.map((x) => ({ type: 'site', x }))];
+    res.innerHTML = items.length ? items.map((it, i) => {
+      if (it.type === 'track') return `<button class="gs-item" data-g="${i}"><span class="gs-ic">${I.music}</span><span><b>${esc(it.x.title)}</b><small>${esc(it.x.artist || '')}</small></span></button>`;
+      if (it.type === 'pl') return `<button class="gs-item" data-g="${i}"><span class="gs-ic">${I.list}</span><span><b>${esc(it.x.name)}</b><small>Playlist · ${it.x.tracks.length} titre(s)</small></span></button>`;
+      return `<button class="gs-item" data-g="${i}"><span class="gs-ic">${I.globe}</span><span><b>${esc(it.x.name)}</b><small>Site · ${esc(hostOf(it.x.url))}</small></span></button>`;
+    }).join('') : `<p class="muted" style="padding:10px 4px">Rien dans votre bibliothèque. Appuyez sur Entrée pour chercher « ${esc(input.value.trim())} » en ligne.</p>`;
+  };
+  const choose = (it) => {
+    closeModal();
+    if (it.type === 'track') { player.playTrack(it.x); if (it.x.kind === 'video' || (it.x.kind === 'youtube' && !getAudioOnly())) openNowPlaying(); }
+    else if (it.type === 'pl') go('playlist', { id: it.x.id, tab: 'library' });
+    else openSite(it.x.url);
+  };
+  input.oninput = run;
+  input.onkeydown = (e) => {
+    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Enter') {
+      const q = input.value.trim();
+      if (!q) return;
+      closeModal();
+      const m = cache.music || (cache.music = {});
+      const y = m.yt || (m.yt = { mode: 'trend', region: 'FR', genre: '', term: '', items: null });
+      const pq = parseQuery(q);
+      Object.assign(y, { mode: 'search', term: pq.query || q, raw: q, exclude: pq.exclude, items: null, showAll: false });
+      go('music');
+    }
+  };
+  res.onclick = (e) => { const b = e.target.closest('[data-g]'); if (b) choose(items[+b.dataset.g]); };
+  setTimeout(() => input.focus(), 30);
+}
+
+/* =========================================================================
+   Sauvegarde et restauration (fichier JSON)
+   ========================================================================= */
+async function exportBackup() {
+  const data = {
+    app: 'Enora', version: currentVersion(), date: new Date().toISOString(),
+    favs: await db.all('favs'), playlists: await db.all('playlists'), sites: loadSites(),
+    settings: getSettings(), audioOnly: getAudioOnly(), hidden: getHidden(), history: getHistory(),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `enora-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  toast('Sauvegarde enregistrée');
+}
+async function importBackup(file) {
+  try {
+    const d = JSON.parse(await file.text());
+    if (d.app !== 'Enora' && d.app !== 'Sonora') throw new Error('ce fichier n\'est pas une sauvegarde Enora');
+    for (const f of d.favs || []) await db.put('favs', f);
+    for (const p of d.playlists || []) await db.put('playlists', p);
+    if (Array.isArray(d.sites)) {
+      const mine = loadSites();
+      const ids = new Set(mine.map((x) => x.id));
+      saveSites([...mine, ...d.sites.filter((x) => !ids.has(x.id))]);
+    }
+    if (d.settings) { try { localStorage.setItem('sonora.settings', JSON.stringify({ ...getSettings(), ...d.settings })); } catch (_) {} markSettingsChanged(); }
+    if (d.hidden) setHidden({ ...getHidden(), ...d.hidden });
+    if (Array.isArray(d.history)) { try { localStorage.setItem(HISTORY_KEY, JSON.stringify([...d.history, ...getHistory()].sort((a, b) => b.t - a.t).slice(0, 300))); } catch (_) {} }
+    await loadState();
+    cloud.touch();
+    toast(`Sauvegarde restaurée : ${(d.favs || []).length} favori(s), ${(d.playlists || []).length} playlist(s)`);
+    render(true);
+  } catch (e) { toast('Restauration impossible : ' + e.message, 5000); }
+}
+
+/* =========================================================================
+   Historique d'écoute et statistiques
+   ========================================================================= */
+const HISTORY_KEY = 'sonora.history';
+function getHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch (_) { return []; } }
+function addToHistory(t) {
+  if (!t) return;
+  const h = getHistory().filter((x) => !(x.track.key === t.key && Date.now() - x.t < 60000));
+  const track = { ...t };
+  if (track.cover && track.cover.startsWith('blob:')) delete track.cover;
+  h.unshift({ track, t: Date.now() });
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, 300))); } catch (_) {}
+}
+function historyStats() {
+  const h = getHistory();
+  const byArtist = new Map();
+  for (const x of h) { const a = x.track.artist || 'Inconnu'; byArtist.set(a, (byArtist.get(a) || 0) + 1); }
+  const top = [...byArtist.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const weekAgo = Date.now() - 7 * 86400000;
+  return { total: h.length, week: h.filter((x) => x.t > weekAgo).length, top };
+}
+// Un titre compte comme écouté après 15 secondes de lecture
+let listenTimer = null;
+
+/* =========================================================================
    Titres retirés des résultats (bouton « − ») et recherche « -mot »
    ========================================================================= */
 const HIDDEN_KEY = 'sonora.hidden';
@@ -443,7 +587,8 @@ async function viewLibrary() {
   const seg = `<div class="seg">
     <button data-lib="offline" class="${libTab === 'offline' ? 'active' : ''}">Hors-ligne</button>
     <button data-lib="favs" class="${libTab === 'favs' ? 'active' : ''}">Favoris</button>
-    <button data-lib="playlists" class="${libTab === 'playlists' ? 'active' : ''}">Playlists</button></div>`;
+    <button data-lib="playlists" class="${libTab === 'playlists' ? 'active' : ''}">Playlists</button>
+    <button data-lib="history" class="${libTab === 'history' ? 'active' : ''}">Historique</button></div>`;
   let body = '';
 
   if (libTab === 'offline') {
@@ -461,6 +606,20 @@ async function viewLibrary() {
       </div>
       ${items.length ? `<p class="muted small">${items.length} élément(s) · ${fmtSize(total)} utilisés</p>${trackRows(items.map(mediaToTrack), { removable: true })}`
         : '<div class="empty"><div class="big">${I.note}</div>Rien ici pour l\'instant.<br>Importez des fichiers ou téléchargez des titres depuis l\'onglet Films &amp; TV.</div>'}`;
+  } else if (libTab === 'history') {
+    const h = getHistory();
+    const st = historyStats();
+    // Récemment écoutés : un seul exemplaire par titre
+    const seen = new Set();
+    const recent = h.filter((x) => !seen.has(x.track.key) && seen.add(x.track.key)).slice(0, 50).map((x) => hydrate(x.track));
+    body = !h.length ? `<div class="empty"><div class="big">${I.clock}</div>Aucune écoute pour l'instant.<br>Les titres écoutés plus de 15 secondes apparaîtront ici.</div>` : `
+      <div class="stats">
+        <div class="stat"><b>${st.week}</b><span>écoutes cette semaine</span></div>
+        <div class="stat"><b>${st.total}</b><span>écoutes au total</span></div>
+        <div class="stat wide"><span>Artistes les plus écoutés</span><b class="small-b">${st.top.map(([a, n]) => `${esc(a)} <i>${n}</i>`).join(' · ')}</b></div>
+      </div>
+      <div class="h2row"><h2>Récemment écoutés</h2><button class="btn ghost" id="hist-clear">Effacer l'historique</button></div>
+      ${trackRows(recent)}`;
   } else if (libTab === 'favs') {
     const favs = [...state.favs.values()].sort((a, b) => b.addedAt - a.addedAt);
     const tracks = favs.filter((f) => f.type === 'track' || f.type === 'radio').map((f) => hydrate(f.data));
@@ -479,9 +638,12 @@ async function viewLibrary() {
         </div>`).join('')}</div>` : `<div class="empty"><div class="big">${I.music}</div>Créez votre première playlist.</div>`}`;
   }
 
-  view.innerHTML = `<div class="h1row"><h1>Bibliothèque</h1><button class="icon-btn" id="open-settings" title="Réglages">${I.settings}</button></div><p class="sub">Votre musique, vos vidéos, vos favoris — toujours sans publicité.</p>${seg}${body}`;
+  view.innerHTML = `<div class="h1row"><h1>Bibliothèque</h1><span style="display:flex;gap:4px"><button class="icon-btn" id="open-search" title="Rechercher (Ctrl+K)">${I.search}</button><button class="icon-btn" id="open-settings" title="Réglages">${I.settings}</button></span></div><p class="sub">Votre musique, vos vidéos, vos favoris — toujours sans publicité.</p>${seg}${body}`;
 
   view.querySelectorAll('[data-lib]').forEach((b) => (b.onclick = () => { libTab = b.dataset.lib; render(); }));
+  const hc = $('#hist-clear');
+  if (hc) hc.onclick = async () => { if (await confirmBox('Effacer tout l\'historique d\'écoute ?', 'Effacer')) { try { localStorage.removeItem(HISTORY_KEY); } catch (_) {} render(true); } };
+  $('#open-search').onclick = openGlobalSearch;
   $('#open-settings').onclick = () => go('settings', { tab: isMobile ? 'library' : 'settings' });
   view.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { libFilter = b.dataset.filter; render(true); }));
   bindCards();
@@ -1371,6 +1533,19 @@ function viewSettings() {
       </details>
     </div>
 
+    <div class="set-block"><h3>Égaliseur</h3>
+      <p class="muted">Pour vos fichiers et les titres téléchargés. Les radios et YouTube gardent leur son d'origine : les navigateurs ne permettent pas de modifier le son des autres sites.</p>
+      <div class="opts">${Object.entries(EQ_PRESETS).map(([k, p]) => `<button class="opt ${st.eq === k ? 'active' : ''}" data-set="eq" data-val="${k}"><b>${p.label}</b></button>`).join('')}</div>
+      <div class="set-row">Normalisation du volume</div>
+      ${opts('normalize', [['off', 'Désactivée', 'Son d\'origine'], ['on', 'Activée', 'Tous les titres au même niveau']])}
+    </div>
+
+    <div class="set-block"><h3>Sauvegarde</h3>
+      <p class="muted">Enregistrez vos favoris, playlists, sites, réglages et historique dans un fichier, pour les garder ou les transférer sans compte.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="bk-export">Exporter une sauvegarde</button><button class="btn ghost" id="bk-import">Restaurer une sauvegarde</button></div>
+      <input id="bk-file" type="file" accept=".json,application/json" class="hidden" />
+    </div>
+
     <div class="set-block"><h3>Films</h3>
       <div class="set-row">Téléchargements</div>
       ${opts('filmDownload', [['light', 'Légère', 'Fichier plus petit (recommandé sur iPhone)'], ['high', 'Haute', 'Meilleure image, fichier plus gros']])}
@@ -1395,6 +1570,9 @@ function viewSettings() {
   if (back) back.onclick = () => go('library');
   bindAccountBlock();
   bindUpdatesBlock();
+  $('#bk-export').onclick = exportBackup;
+  $('#bk-import').onclick = () => $('#bk-file').click();
+  $('#bk-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importBackup(f); };
   const ua = $('#unhide-all');
   if (ua) ua.onclick = () => { setHidden({}); toast('Tous les titres sont réaffichés'); render(true); };
   bindSites();
@@ -1403,6 +1581,7 @@ function viewSettings() {
   $('#yt-key-del').onclick = () => { setYtApiKey(''); toast('Clé supprimée'); afterKey(); };
   view.querySelectorAll('[data-set]').forEach((b) => (b.onclick = () => {
     setSetting(b.dataset.set, b.dataset.val);
+    applyEffects();
     cloud.touch();
     // Les albums déjà affichés seront rechargés avec la nouvelle qualité
     toast('Réglage enregistré');
@@ -1563,6 +1742,62 @@ function updateState() {
   $('#np-play').innerHTML = icon;
 }
 
+/* ---------- Paroles (fichiers .lrc de l'utilisateur) ---------- */
+let lyricsState = { key: null, timed: false, lines: [], active: -1 };
+function currentMedia() {
+  const t = player.current;
+  const id = t && (t.mediaId || player.offlineIndex.get(t.key));
+  return id ? state.media.find((m) => m.id === id) : null;
+}
+function renderLyrics() {
+  const box = $('#np-lyrics');
+  const addBtn = $('#np-addlrc');
+  const t = player.current;
+  const m = currentMedia();
+  addBtn.style.display = m && !m.lyrics && t.kind === 'audio' ? 'flex' : 'none';
+  if (!m || !m.lyrics) { box.classList.add('hidden'); lyricsState = { key: null, timed: false, lines: [], active: -1 }; return; }
+  if (lyricsState.key === m.id) return;
+  const p = parseLyrics(m.lyrics);
+  lyricsState = { key: m.id, timed: p.timed, lines: p.lines, active: -1 };
+  box.innerHTML = `<h3 class="np-qh">Paroles${p.timed ? '' : ' (non synchronisées)'}</h3>` + p.lines.map((l, i) => `<p data-l="${i}"${l.t != null ? ` data-t="${l.t}"` : ''}>${esc(l.text) || '&nbsp;'}</p>`).join('');
+  box.classList.remove('hidden');
+}
+function syncLyrics(time) {
+  if (!lyricsState.timed || !lyricsState.lines.length) return;
+  let i = -1;
+  for (let k = 0; k < lyricsState.lines.length; k++) { if (lyricsState.lines[k].t <= time + 0.2) i = k; else break; }
+  if (i === lyricsState.active) return;
+  lyricsState.active = i;
+  const box = $('#np-lyrics');
+  box.querySelectorAll('p.on').forEach((p) => p.classList.remove('on'));
+  const el = box.querySelector(`p[data-l="${i}"]`);
+  if (el) { el.classList.add('on'); if (!npSheet.classList.contains('hidden')) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+}
+$('#np-lyrics').addEventListener('click', (e) => { const p = e.target.closest('p[data-t]'); if (p) player.el.currentTime = +p.dataset.t; });
+$('#np-addlrc').onclick = () => $('#lrc-input').click();
+$('#lrc-input').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  const m = currentMedia();
+  if (!f || !m) return;
+  m.lyrics = await f.text();
+  await db.put('media', m);
+  lyricsState.key = null;
+  renderLyrics();
+  toast('Paroles ajoutées');
+});
+
+/* ---------- File d'attente -> playlist ---------- */
+$('#np-saveq').onclick = async () => {
+  if (!player.queue.length) return;
+  const name = await ask('Nom de la playlist', 'Ma sélection', player.current?.artist ? `Sélection ${player.current.artist}` : 'Ma sélection');
+  if (!name) return;
+  const p = { id: uid(), name, tracks: player.queue.filter((t) => !t.live).map(storableTrack), createdAt: Date.now() };
+  await savePlaylist(p);
+  state.playlists.push(p);
+  toast(`Playlist « ${name} » créée (${p.tracks.length} titres)`);
+};
+
 function updateTime() {
   const el = player.el;
   const t = player.current;
@@ -1578,6 +1813,10 @@ function updateTime() {
 }
 
 player.addEventListener('change', () => {
+  renderLyrics();
+  clearTimeout(listenTimer);
+  const t = player.current;
+  if (t) listenTimer = setTimeout(() => { if (player.current?.key === t.key) addToHistory(t); }, 15000);
   updateNowPlaying();
   // Met à jour la piste surlignée sans recharger la page
   view.querySelectorAll('.row').forEach((r) => {
@@ -1594,7 +1833,7 @@ player.addEventListener('state', () => {
     });
   }
 });
-player.addEventListener('time', updateTime);
+player.addEventListener('time', () => { updateTime(); if (lyricsState.timed) syncLyrics(player.el.currentTime || 0); });
 let ytEmbedBlocked = false;
 /** Si le lecteur intégré a été refusé sur cet appareil, les titres YouTube s'ouvrent directement dans YouTube. */
 function ytDirect(tracks, start) {
@@ -1638,6 +1877,7 @@ player.addEventListener('sleep', () => { $('#np-sleep').value = '0'; toast('Minu
 
 /* Raccourcis clavier (Windows) */
 document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openGlobalSearch(); return; }
   if (e.target.matches('input, select, textarea')) return;
   if (e.code === 'Space') { e.preventDefault(); player.toggle(); }
   if (e.code === 'ArrowRight' && e.ctrlKey) player.next();
@@ -1660,6 +1900,8 @@ document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = I[el.d
 document.body.classList.add('no-mini', `platform-${platform}`);
 if (isStoreBuild) document.body.classList.add('store-build');
 startUpdateChecks();
+function applyEffects() { const st = getSettings(); setAudioEffects({ preset: st.eq, normalize: st.normalize === 'on' }); }
+applyEffects();
 loadState()
   .then(() => go('library'))
   .catch((e) => { console.error(e); view.innerHTML = errorHtml(e); });
