@@ -417,6 +417,20 @@ function collectVideos(node, out, seen) {
   for (const k in node) if (k !== 'videoRenderer') collectVideos(node[k], out, seen);
 }
 
+const resultsUrl = (query, region, recent) => {
+  const gl = !region || region === 'WW' ? 'FR' : region;
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=${encodeURIComponent(recent ? SP_VIDEOS_MONTH : SP_VIDEOS)}&hl=fr&gl=${gl}&persist_gl=1`;
+};
+
+/** Applications de bureau : la page de résultats est ouverte dans une vraie fenêtre YouTube invisible. */
+async function pageSearch(query, { region = 'FR', recent = false } = {}) {
+  if (!window.sonora?.ytPage) throw new Error('indisponible sur cet appareil');
+  const json = await window.sonora.ytPage(resultsUrl(query, region, recent));
+  const out = [];
+  collectVideos(JSON.parse(json), out, new Set());
+  return out;
+}
+
 /** Méthode de secours : la page de résultats de recherche, lue comme par un navigateur. */
 async function htmlSearch(query, { region = 'FR', recent = false } = {}) {
   const gl = !region || region === 'WW' ? 'US' : region;
@@ -483,7 +497,11 @@ async function innertubeRequest(query, region, recent, cfg) {
   return httpRequest({ url, method: 'POST', headers, body });
 }
 
+let internalBlocked = false; // la recherche interne a été refusée : on passe directement à la vraie page
 async function innertubeSearch(query, { region = 'FR', recent = false } = {}) {
+  if (internalBlocked && window.sonora?.ytPage) {
+    try { return await pageSearch(query, { region, recent }); } catch (_) { return htmlSearch(query, { region, recent }); }
+  }
   let d;
   try {
     try {
@@ -496,7 +514,11 @@ async function innertubeSearch(query, { region = 'FR', recent = false } = {}) {
         if (!cfg) throw first;
         d = await innertubeRequest(query, region, recent, cfg);
       } catch (second) {
-        // Toujours refusé : page de résultats de recherche
+        internalBlocked = true;
+        // Toujours refusé : vraie page YouTube (bureau), puis page de résultats téléchargée
+        if (window.sonora?.ytPage) {
+          try { const l = await pageSearch(query, { region, recent }); if (l.length) return l; } catch (_) {}
+        }
         return await htmlSearch(query, { region, recent });
       }
     }
@@ -590,7 +612,7 @@ async function multiSearch(cacheId, queries, { region, recent, order = '' }) {
   }
   // Pages suivantes de YouTube (applications) tant qu'il manque des titres
   const used = new Set();
-  for (let guard = 0; out.length < TARGET && guard < 5 && !isWebApp(); guard++) {
+  for (let guard = 0; out.length < TARGET && guard < 5 && !isWebApp() && !internalBlocked; guard++) {
     const token = [...tokens].reverse().find((t) => !used.has(t)); // le plus récent d'abord
     if (!token) break;
     used.add(token);
@@ -647,7 +669,40 @@ export async function ytStyle(region = 'FR', style = '') {
   return multiSearch(`style.${region}.${style}`, [...new Set(queries)], { region, recent: false });
 }
 
+/** Catégorie (ex. « Afro ») : les meilleurs titres de ses principaux sous-styles, mélangés. */
+export async function ytCategory(cat, subs = []) {
+  const year = new Date().getFullYear();
+  const queries = [`${cat} ${year} hits`, ...subs.slice(0, 5).map((g) => `${g} ${year}`)];
+  return multiSearch(`cat.${cat}`, queries, { region: 'WW', recent: false, order: 'viewCount' });
+}
+
 /** Recherche libre (titre, artiste…). */
 export async function ytSearch(q, region = 'FR') {
   return multiSearch(`search.${region}.${q.toLowerCase()}`, [q], { region, recent: false });
+}
+
+
+/* =========================================================================
+   Diagnostic YouTube (Réglages) : teste chaque méthode et renvoie le résultat
+   ========================================================================= */
+export async function ytDiagnostic() {
+  const q = 'makossa';
+  const rows = [];
+  const test = async (name, fn) => {
+    const t0 = Date.now();
+    try {
+      const r = await fn();
+      rows.push({ name, ok: true, detail: `${Array.isArray(r) ? r.length + ' titres' : r} · ${Date.now() - t0} ms` });
+    } catch (e) {
+      rows.push({ name, ok: false, detail: `${e.message || e}${e.reason ? ' [' + e.reason + ']' : ''}` });
+    }
+  };
+  await test('Paramètres de YouTube (page d\'accueil)', async () => { const c = await loadYtConfig(true); return `version ${c.version}${c.key ? ', clé interne trouvée' : ', pas de clé interne'}`; });
+  await test('Recherche interne (youtubei)', () => innertubeRequest(q, 'FR', false, ytConfig).then((d) => { const o = []; collectVideos(d, o, new Set()); return o; }));
+  if (window.sonora?.ytPage) await test('Vraie page YouTube (fenêtre invisible)', () => pageSearch(q, { region: 'FR' }));
+  await test('Page de résultats téléchargée', () => htmlSearch(q, { region: 'FR' }));
+  const key = getYtApiKey();
+  if (key) await test(`API officielle (${getUserYtApiKey() ? 'votre clé' : 'clé intégrée'})`, () => apiSearchOnce(q, { region: 'FR', category: true }, key));
+  else rows.push({ name: 'API officielle', ok: null, detail: 'aucune clé (facultatif)' });
+  return rows;
 }

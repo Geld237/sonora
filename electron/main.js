@@ -197,6 +197,46 @@ app.whenReady().then(() => {
     session.defaultSession.cookies.set({ url: 'https://www.youtube.com', domain: '.youtube.com', path: '/', name, value, secure: true, expirationDate: Math.floor(Date.now() / 1000) + 365 * 86400 }).catch(() => {});
   }
 
+  // Recherche YouTube par une vraie page (fenêtre invisible) : la page de résultats est chargée
+  // comme dans un navigateur, puis on lit la liste des vidéos qu'elle contient.
+  const ytSearchSession = session.fromPartition('persist:ytsearch');
+  installAdblock(ytSearchSession);
+  for (const [name, value] of [['SOCS', 'CAI'], ['CONSENT', 'YES+cb']]) {
+    ytSearchSession.cookies.set({ url: 'https://www.youtube.com', domain: '.youtube.com', path: '/', name, value, secure: true, expirationDate: Math.floor(Date.now() / 1000) + 365 * 86400 }).catch(() => {});
+  }
+  let ytWin = null;
+  let ytQueue = Promise.resolve();
+  const ytWindow = () => {
+    if (ytWin && !ytWin.isDestroyed()) return ytWin;
+    ytWin = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { partition: 'persist:ytsearch', sandbox: true, contextIsolation: true, backgroundThrottling: false } });
+    ytWin.webContents.setAudioMuted(true);
+    ytWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    return ytWin;
+  };
+  const readInitialData = (w) => w.webContents.executeJavaScript('window.ytInitialData ? JSON.stringify(window.ytInitialData) : ""', true);
+  async function loadResultsPage(url) {
+    const w = ytWindow();
+    const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('YouTube ne répond pas')), ms))]);
+    await withTimeout(w.loadURL(url), 25000);
+    let data = await readInitialData(w);
+    if (!data && /consent\./.test(w.webContents.getURL())) {
+      // Page de consentement (Europe) : on accepte, puis on recharge la recherche
+      await w.webContents.executeJavaScript(`(() => { const b = [...document.querySelectorAll('button, input[type=submit]')].find((x) => /tout accepter|accept all|j'accepte|accepter/i.test(x.innerText || x.value || '')); if (b) b.click(); return !!b; })()`, true).catch(() => false);
+      await new Promise((r) => setTimeout(r, 2500));
+      await withTimeout(w.loadURL(url), 25000);
+      data = await readInitialData(w);
+    }
+    if (!data) throw new Error(`page de résultats sans données (${new URL(w.webContents.getURL()).hostname})`);
+    return data;
+  }
+  ipcMain.handle('sonora:ytpage', (_event, url) => {
+    const u = new URL(url);
+    if (u.hostname !== 'www.youtube.com' || u.pathname !== '/results') throw new Error('Adresse non autorisée');
+    const job = ytQueue.then(() => loadResultsPage(u.toString()));
+    ytQueue = job.catch(() => {});
+    return job;
+  });
+
   ipcMain.handle('sonora:http', async (_event, req) => {
     const url = new URL(req.url);
     if (url.protocol !== 'https:' || !/(^|\.)(youtube\.com|googleapis\.com)$/i.test(url.hostname)) throw new Error('Adresse non autorisée');

@@ -1,7 +1,7 @@
 {
   "name": "sonora",
   "productName": "Enora",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Enora — musique, films, radio et YouTube sans publicité, en ligne et hors-ligne (Windows + iPhone)",
   "main": "electron/main.js",
   "author": "Geld237",

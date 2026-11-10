@@ -7,6 +7,8 @@ if (process.isMainFrame) {
     os: process.platform, // win32 | darwin | linux
     // Requêtes vers YouTube sans restriction CORS (faites par le processus principal)
     http: (req) => ipcRenderer.invoke('sonora:http', req),
+    // Page de résultats YouTube chargée dans une fenêtre invisible (recherche la plus fiable)
+    ytPage: (url) => ipcRenderer.invoke('sonora:ytpage', url),
     // Mises à jour automatiques
     appInfo: () => ipcRenderer.invoke('sonora:app-info'),
     checkUpdate: () => ipcRenderer.invoke('sonora:update-check'),

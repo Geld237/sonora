@@ -1,5 +1,5 @@
 import { db, uid } from './db.js';
-import { iaSearch, musicQuery, filmQuery, iaAlbum, iaFilm, radioSearch, ytTrending, ytNewReleases, ytSearch, ytStyle, getYtApiKey, getUserYtApiKey, hasBuiltInYtKey, setYtApiKey, ytMode } from './api.js';
+import { iaSearch, musicQuery, filmQuery, iaAlbum, iaFilm, radioSearch, ytTrending, ytNewReleases, ytSearch, ytStyle, ytCategory, ytDiagnostic, getYtApiKey, getUserYtApiKey, hasBuiltInYtKey, setYtApiKey, ytMode } from './api.js';
 import { ytMedia } from './youtube-player.js';
 import { getSettings, setSetting, markSettingsChanged, settingsChangedAt, SETTINGS_TS_KEY } from './settings.js';
 import * as cloud from './cloud.js';
@@ -751,6 +751,22 @@ const STYLES_BY_COUNTRY = {
   TG: ['Musique togolaise', 'Rap togolais', 'Afrobeats', 'Agbadja', 'Gospel togolais', 'Coupé-décalé'],
 };
 const YT_MUSIC_CHIPS = STYLES_BY_COUNTRY.FR;
+
+// Musique organisée par style : catégories puis sous-catégories
+const MUSIC_CATEGORIES = [
+  ['Afro', ['Afrobeats', 'Amapiano', 'Makossa', 'Bikutsi', 'Coupé-décalé', 'Zouglou', 'Ndombolo', 'Rumba congolaise', 'Mbalax', 'Afro pop', 'Highlife']],
+  ['Rap & Hip-hop', ['Rap français', 'Rap africain', 'Afro trap', 'Drill', 'Trap', 'Rap US', 'Rap belge', 'Rap québécois']],
+  ['Pop & Variété', ['Pop française', 'Variété française', 'Pop internationale', 'K-pop', 'Chanson française']],
+  ['R&B & Soul', ['R&B', 'R&B français', 'Soul', 'Neo soul', 'Afro R&B']],
+  ['Caraïbes', ['Zouk', 'Kompa', 'Dancehall', 'Reggae', 'Shatta', 'Soca']],
+  ['Latino', ['Reggaeton', 'Salsa', 'Bachata', 'Latin pop']],
+  ['Électro', ['Afro house', 'House', 'Techno', 'EDM', 'Lo-fi']],
+  ['Gospel', ['Gospel africain', 'Gospel francophone', 'Louange et adoration', 'Gospel US']],
+  ['Musiques du monde', ['Raï', 'Chaabi', 'Gnaoua', 'Twarab', 'Musique mandingue', 'Musique arabe', 'Musique indienne']],
+  ['Jazz, Blues & Classique', ['Jazz', 'Blues', 'Musique classique', 'Piano', 'Musique de film']],
+  ['Rock & Métal', ['Rock', 'Rock français', 'Métal', 'Indie']],
+];
+const subsOf = (cat) => (MUSIC_CATEGORIES.find((c) => c[0] === cat) || [null, []])[1];
 const stylesFor = (region) => STYLES_BY_COUNTRY[region] || STYLES_BY_COUNTRY.FR;
 
 const YT_REGIONS = [['WW', 'Monde'], ['FR', 'France'], ['CI', "Côte d'Ivoire"], ['SN', 'Sénégal'], ['CM', 'Cameroun'], ['CD', 'RD Congo'], ['BE', 'Belgique'], ['CA', 'Canada'], ['MA', 'Maroc'], ['ML', 'Mali'], ['NG', 'Nigeria'], ['HT', 'Haïti'], ['KM', 'Comores'], ['TG', 'Togo'], ['US', 'États-Unis'], ['GB', 'Royaume-Uni']];
@@ -759,21 +775,26 @@ const YT_REGIONS = [['WW', 'Monde'], ['FR', 'France'], ['CI', "Côte d'Ivoire"],
 /** Onglet Musique : YouTube (titres récents, streaming) + Musique libre (albums téléchargeables) réunis. */
 async function viewMusic(_p, seq) {
   const s = cache.music || (cache.music = {});
-  const y = s.yt || (s.yt = { mode: 'trend', region: 'FR', genre: '', term: '', items: null, error: null });
+  const y = s.yt || (s.yt = { mode: 'trend', region: 'WW', cat: '', genre: '', term: '', items: null, error: null });
+  y.region = 'WW'; // la musique est organisée par style, plus par pays
   const a = getAudioOnly();
-  const title = { trend: 'Tendances', new: 'Nouveautés', genre: y.genre, search: `Résultats pour « ${y.term} »` }[y.mode];
+  const title = { trend: 'Tendances', new: 'Nouveautés', cat: y.cat, genre: y.genre, search: `Résultats pour « ${y.term} »` }[y.mode];
+  const subs = subsOf(y.cat);
   view.innerHTML = `<h1>Musique</h1>
-    <p class="sub">Les titres récents et populaires, par pays et par style, lus directement dans Enora sans publicité.</p>
+    <p class="sub">Les titres récents et populaires, par style musical, lus directement dans Enora sans publicité.</p>
     <form class="searchbar" id="ysf">
       <input id="ysq" placeholder="Titre, artiste… (ajoutez -mot pour exclure)" value="${esc(y.raw || (y.mode === 'search' ? y.term : ''))}" />
-      <select id="yreg" title="Pays">${YT_REGIONS.map(([c, l]) => `<option value="${c}" ${y.region === c ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <button class="btn">Rechercher</button></form>
     <div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">${ic('video', 'Vidéo')}</button><button data-mode="audio" class="${a ? 'active' : ''}">${ic('headphones', 'Audio seul')}</button></div>
-    <div class="chips">
+    <div class="chips catchips">
       <button class="chip ${y.mode === 'trend' ? 'active' : ''}" data-ym="trend">Tendances</button>
       <button class="chip ${y.mode === 'new' ? 'active' : ''}" data-ym="new">Nouveautés</button>
-      ${stylesFor(y.region).map((c) => `<button class="chip ${y.mode === 'genre' && y.genre === c ? 'active' : ''}" data-yg="${esc(c)}">${esc(c)}</button>`).join('')}
+      ${MUSIC_CATEGORIES.map(([c]) => `<button class="chip ${y.cat === c && (y.mode === 'cat' || y.mode === 'genre') ? 'active' : ''}" data-yc="${esc(c)}">${esc(c)}</button>`).join('')}
     </div>
+    ${subs.length && (y.mode === 'cat' || y.mode === 'genre') ? `<div class="chips subchips">
+      <button class="chip ${y.mode === 'cat' ? 'active' : ''}" data-yc="${esc(y.cat)}">Tout ${esc(y.cat)}</button>
+      ${subs.map((g) => `<button class="chip ${y.mode === 'genre' && y.genre === g ? 'active' : ''}" data-yg="${esc(g)}">${esc(g)}</button>`).join('')}
+    </div>` : ''}
     <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${esc(title)}
       <button class="btn" id="yt-playall" style="font-size:14px" disabled>${ic('play', 'Tout lire')}</button><button class="btn ghost" id="yt-shuffle" style="font-size:14px" disabled>${ic('shuffle', 'Aléatoire')}</button></h2>
     <div id="res">${y.items ? '' : loadingHtml()}</div>
@@ -782,17 +803,11 @@ async function viewMusic(_p, seq) {
   const reload = () => { y.items = null; y.page = 0; render(true); };
   view.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { setAudioOnly(b.dataset.mode === 'audio'); updateNowPlaying(); render(true); }));
   view.querySelectorAll('[data-ym]').forEach((b) => (b.onclick = () => { y.mode = b.dataset.ym; reload(); }));
+  view.querySelectorAll('[data-yc]').forEach((b) => (b.onclick = () => { y.mode = 'cat'; y.cat = b.dataset.yc; reload(); }));
   view.querySelectorAll('[data-yg]').forEach((b) => (b.onclick = () => { y.mode = 'genre'; y.genre = b.dataset.yg; reload(); }));
-  $('#yreg').onchange = () => {
-    y.region = $('#yreg').value;
-    if (y.mode === 'genre' && !stylesFor(y.region).includes(y.genre)) y.mode = 'trend';
-    y.items = null;
-    render(true);
-  };
   $('#ysf').onsubmit = (e) => {
     e.preventDefault();
     const q = $('#ysq').value.trim();
-    y.region = $('#yreg').value;
     const pq = parseQuery(q);
     y.exclude = pq.exclude;
     if (pq.query) { y.mode = 'search'; y.term = pq.query; y.raw = q; } else if (y.mode === 'search' || pq.exclude.length) { if (!pq.exclude.length) y.mode = 'trend'; }
@@ -803,7 +818,8 @@ async function viewMusic(_p, seq) {
   const loadYt = y.items ? Promise.resolve(y.items) : (
     y.mode === 'trend' ? ytTrending(y.region)
       : y.mode === 'new' ? ytNewReleases(y.region)
-      : y.mode === 'genre' ? ytStyle(y.region, y.genre)
+      : y.mode === 'genre' ? ytStyle('WW', y.genre)
+      : y.mode === 'cat' ? ytCategory(y.cat, subsOf(y.cat))
       : ytSearch(y.term, y.region));
 
   const showYt = (all) => {
@@ -1544,6 +1560,10 @@ function viewSettings() {
           <li>« Identifiants » → « Créer des identifiants » → « Clé API », puis collez-la ici.</li>
         </ol>
       </details>
+      <div class="set-row">Diagnostic</div>
+      <p class="muted">Si la musique en ligne ne se charge pas, lancez ce test et envoyez une capture d'écran du résultat.</p>
+      <button class="btn ghost" id="yt-diag">Diagnostic YouTube</button>
+      <div id="yt-diag-out" class="diag"></div>
     </div>
 
     <div class="set-block"><h3>Égaliseur</h3>
@@ -1575,7 +1595,7 @@ function viewSettings() {
 
     ${updatesBlockHtml()}
 
-    <div class="set-block"><h3>ℹ️ À propos</h3>
+    <div class="set-block"><h3>À propos</h3>
       <p class="muted">Enora ${esc(currentVersion())} · Sans publicité · Sources : YouTube (lecteur officiel), Internet Archive, Radio Browser, vos fichiers.</p>
     </div>`;
 
@@ -1592,6 +1612,16 @@ function viewSettings() {
   const afterKey = () => { if (cache.music?.yt) cache.music.yt.items = null; cloud.touch(); render(true); };
   $('#yt-key-save').onclick = () => { setYtApiKey($('#yt-key').value); toast(getUserYtApiKey() ? 'Clé enregistrée : API officielle activée' : 'Clé vide'); afterKey(); };
   $('#yt-key-del').onclick = () => { setYtApiKey(''); toast('Clé supprimée'); afterKey(); };
+  $('#yt-diag').onclick = async () => {
+    const out = $('#yt-diag-out'), btn = $('#yt-diag');
+    btn.disabled = true; out.innerHTML = '<p class="muted">Test en cours (jusqu\'à 30 secondes)…</p>';
+    try {
+      const rows = await ytDiagnostic();
+      out.innerHTML = `<p class="muted">Enora ${esc(currentVersion())} · ${esc(navigator.platform || '')}</p>` + rows.map((r) =>
+        `<div class="diag-row ${r.ok ? 'ok' : r.ok === false ? 'ko' : ''}"><b>${r.ok ? 'OK' : r.ok === false ? 'Échec' : '—'}</b><span>${esc(r.name)}</span><small>${esc(r.detail)}</small></div>`).join('');
+    } catch (e) { out.innerHTML = `<p class="muted">Erreur : ${esc(e.message || e)}</p>`; }
+    btn.disabled = false;
+  };
   view.querySelectorAll('[data-set]').forEach((b) => (b.onclick = () => {
     setSetting(b.dataset.set, b.dataset.val);
     applyEffects();
