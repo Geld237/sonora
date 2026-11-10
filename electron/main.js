@@ -192,11 +192,18 @@ app.whenReady().then(() => {
   );
 
   // Requêtes YouTube pour l'onglet Musique (recherche, tendances) — hôtes limités
+  // Consentement aux cookies YouTube (Europe) : sans lui, YouTube redirige ou refuse les requêtes
+  for (const [name, value] of [['SOCS', 'CAI'], ['CONSENT', 'YES+cb']]) {
+    session.defaultSession.cookies.set({ url: 'https://www.youtube.com', domain: '.youtube.com', path: '/', name, value, secure: true, expirationDate: Math.floor(Date.now() / 1000) + 365 * 86400 }).catch(() => {});
+  }
+
   ipcMain.handle('sonora:http', async (_event, req) => {
     const url = new URL(req.url);
     if (url.protocol !== 'https:' || !/(^|\.)(youtube\.com|googleapis\.com)$/i.test(url.hostname)) throw new Error('Adresse non autorisée');
     const method = req.method === 'POST' ? 'POST' : 'GET';
-    const res = await net.fetch(url.toString(), { method, headers: req.headers || {}, body: method === 'POST' ? req.body : undefined });
+    const headers = { 'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8', ...(req.headers || {}) };
+    delete headers.Cookie; // les cookies viennent de la session (consentement enregistré au démarrage)
+    const res = await net.fetch(url.toString(), { method, headers, body: method === 'POST' ? req.body : undefined, credentials: 'include' });
     return { status: res.status, text: await res.text() };
   });
   const yt = session.fromPartition('persist:youtube');

@@ -317,7 +317,7 @@ function hydrate(t) {
    ========================================================================= */
 let rowTracks = [];   // pistes affichées dans la vue courante
 
-function trackRows(tracks, { removable = false, playlistId = null, numbered = false, ranked = false, hideable = false } = {}) {
+function trackRows(tracks, { removable = false, playlistId = null, numbered = false, ranked = false, hideable = false, rankStart = 0 } = {}) {
   const base = rowTracks.length;
   rowTracks.push(...tracks);
   if (!tracks.length) return '';
@@ -327,7 +327,7 @@ function trackRows(tracks, { removable = false, playlistId = null, numbered = fa
     const offline = isOffline(t);
     const canDl = !t.live && t.origin === 'archive' && !offline;
     const cover = t.cover || (t.kind === 'video' ? FALLBACK_VIDEO : FALLBACK_AUDIO);
-    return `<div class="row ${playing ? 'playing' : ''}">${ranked ? `<span class="rank${j < 3 ? ' top' : ''}">${j + 1}</span>` : ''}
+    return `<div class="row ${playing ? 'playing' : ''}">${ranked ? `<span class="rank${rankStart + j < 3 ? ' top' : ''}">${rankStart + j + 1}</span>` : ''}
       <div class="rc${t.kind === 'youtube' ? ' wide' : ''}">${numbered ? `<span class="muted small">${j + 1}</span>` : `<img src="${esc(cover)}" loading="lazy" onerror="this.src='${t.kind === 'video' ? FALLBACK_VIDEO : FALLBACK_AUDIO}'">`}</div>
       <div class="ri" data-act="play" data-i="${i}">
         <div class="rt ellipsis">${esc(t.title)}${t.live ? '<span class="badge">EN DIRECT</span>' : ''}${t.kind === 'video' ? '<span class="badge">VIDÉO</span>' : ''}${offline ? '<span class="badge ok">HORS-LIGNE</span>' : ''}${t.quality === 'Sans perte' ? '<span class="badge">SANS PERTE</span>' : ''}</div>
@@ -558,6 +558,8 @@ function go(name, params = {}) {
 }
 
 document.querySelectorAll('.nav-item').forEach((b) => b.addEventListener('click', () => go(b.dataset.view)));
+// Le logo et le nom « Enora » ramènent à la Bibliothèque
+$('.brand').addEventListener('click', () => { libTab = 'offline'; go('library'); });
 
 let renderSeq = 0;
 const stale = (seq) => seq !== renderSeq;
@@ -777,7 +779,7 @@ async function viewMusic(_p, seq) {
     <div id="res">${y.items ? '' : loadingHtml()}</div>
 `;
 
-  const reload = () => { y.items = null; y.showAll = false; render(true); };
+  const reload = () => { y.items = null; y.page = 0; render(true); };
   view.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { setAudioOnly(b.dataset.mode === 'audio'); updateNowPlaying(); render(true); }));
   view.querySelectorAll('[data-ym]').forEach((b) => (b.onclick = () => { y.mode = b.dataset.ym; reload(); }));
   view.querySelectorAll('[data-yg]').forEach((b) => (b.onclick = () => { y.mode = 'genre'; y.genre = b.dataset.yg; reload(); }));
@@ -810,13 +812,24 @@ async function viewMusic(_p, seq) {
     const items = filterResults(all, y.exclude || []);
     refreshMusicList = () => showYt(all);
     if (!items.length) { res.innerHTML = '<div class="empty">Aucun titre trouvé pour le moment. Réessayez dans quelques minutes ou choisissez un style.</div>'; return; }
-    // Classement : les 20 premiers, puis « Voir plus »
-    const shown = y.showAll ? items : items.slice(0, 20);
+    // Classement en pages de 20 titres, numérotées
+    const PER = 20;
+    const pages = Math.max(1, Math.ceil(items.length / PER));
+    y.page = Math.min(Math.max(0, y.page || 0), pages - 1);
+    const start = y.page * PER;
+    const shown = items.slice(start, start + PER);
     rowTracks = [];
-    res.innerHTML = trackRows(shown, { ranked: true, hideable: true })
-      + (items.length > shown.length ? `<button class="btn ghost" id="yt-more" style="margin:12px 0 0 10px">Voir plus (${items.length - shown.length} titres)</button>` : '');
-    const more = $('#yt-more');
-    if (more) more.onclick = () => { y.showAll = true; showYt(items); };
+    const pager = pages > 1 ? `<nav class="pager" aria-label="Pages de résultats">
+        <button class="pg" data-pg="${y.page - 1}" ${y.page === 0 ? 'disabled' : ''} title="Page précédente">${I.chevronLeft}</button>
+        ${Array.from({ length: pages }, (_, i) => `<button class="pg ${i === y.page ? 'on' : ''}" data-pg="${i}">${i + 1}</button>`).join('')}
+        <button class="pg" data-pg="${y.page + 1}" ${y.page === pages - 1 ? 'disabled' : ''} title="Page suivante">${I.chevronRight}</button>
+        <span class="pg-info">${start + 1}–${start + shown.length} sur ${items.length}</span></nav>` : '';
+    res.innerHTML = trackRows(shown, { ranked: true, hideable: true, rankStart: start }) + pager;
+    res.querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => {
+      y.page = +b.dataset.pg;
+      showYt(all);
+      $('h2', view)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }));
     $('#yt-playall').disabled = false;
     $('#yt-shuffle').disabled = false;
     $('#yt-playall').onclick = () => { player.shuffle = false; if (ytDirect(items, 0)) return; player.playList(items, 0); if (!getAudioOnly()) openNowPlaying(); };

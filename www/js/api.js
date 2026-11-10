@@ -412,7 +412,39 @@ function collectVideos(node, out, seen) {
       }));
     }
   }
+  const tok = node.continuationCommand?.token;
+  if (tok && !out.token) out.token = tok;
   for (const k in node) if (k !== 'videoRenderer') collectVideos(node[k], out, seen);
+}
+
+/** Méthode de secours : la page de résultats de recherche, lue comme par un navigateur. */
+async function htmlSearch(query, { region = 'FR', recent = false } = {}) {
+  const gl = !region || region === 'WW' ? 'US' : region;
+  const sp = encodeURIComponent(recent ? SP_VIDEOS_MONTH : SP_VIDEOS);
+  const html = await httpRequest({
+    url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=${sp}&hl=fr&gl=${gl}&persist_gl=1`,
+    headers: { Accept: 'text/html', Cookie: 'SOCS=CAI; CONSENT=YES+cb' },
+    text: true,
+  });
+  const m = html.match(/ytInitialData\s*=\s*(\{.+?\});\s*<\/script>/s) || html.match(/window\["ytInitialData"\]\s*=\s*(\{.+?\});/s);
+  if (!m) throw new Error('page YouTube illisible');
+  const out = [];
+  collectVideos(JSON.parse(m[1]), out, new Set());
+  return out;
+}
+
+/** Résultats suivants (même recherche) à partir du jeton « page suivante ». */
+async function innertubeContinue(token, region) {
+  const cfg = ytConfig || {};
+  const version = cfg.version || '2.20261101.00.00';
+  const body = { context: { client: { clientName: 'WEB', clientVersion: version, hl: 'fr', gl: !region || region === 'WW' ? 'US' : region, ...(cfg.visitor ? { visitorData: cfg.visitor } : {}) } }, continuation: token };
+  const headers = { 'Content-Type': 'application/json', 'X-Youtube-Client-Name': '1', 'X-Youtube-Client-Version': version };
+  if (!isWebApp()) { headers.Origin = 'https://www.youtube.com'; headers.Referer = 'https://www.youtube.com/'; }
+  const url = cfg.key ? `${INNERTUBE}&key=${encodeURIComponent(cfg.key)}` : INNERTUBE;
+  const d = await httpRequest({ url, method: 'POST', headers, body });
+  const out = [];
+  collectVideos(d, out, new Set());
+  return out;
 }
 
 /* Paramètres actuels du site YouTube (version du client, clé interne, identifiant visiteur),
@@ -460,8 +492,13 @@ async function innertubeSearch(query, { region = 'FR', recent = false } = {}) {
       if (isWebApp()) throw first;
       // Refus (403/400…) : on relit les paramètres actuels de YouTube puis on réessaie une fois
       const cfg = await loadYtConfig(true).catch(() => null);
-      if (!cfg) throw first;
-      d = await innertubeRequest(query, region, recent, cfg);
+      try {
+        if (!cfg) throw first;
+        d = await innertubeRequest(query, region, recent, cfg);
+      } catch (second) {
+        // Toujours refusé : page de résultats de recherche
+        return await htmlSearch(query, { region, recent });
+      }
     }
   } catch (e) {
     if (isWebApp()) {
@@ -483,7 +520,9 @@ async function innertubeWide(query, { region, recent }) {
   let list = await innertubeSearch(query, { region, recent });
   if (list.length < 10 && recent) {
     const more = await innertubeSearch(query, { region, recent: false }).catch(() => []);
+    const token = list.token || more.token;
     list = mergeTracks(list, more);
+    list.token = token;
   }
   return list;
 }
@@ -526,8 +565,10 @@ async function multiSearch(cacheId, queries, { region, recent, order = '' }) {
   const cached = cacheGet(cacheId);
   if (cached) return cached;
   const key = getYtApiKey();
+  const TARGET = 60; // 3 pages de 20 titres
   let out = [];
   let lastError = null;
+  const tokens = [];
   const list = isWebApp() && key ? queries.slice(0, 2) : queries;
   for (const q of list) {
     try {
@@ -542,9 +583,22 @@ async function multiSearch(cacheId, queries, { region, recent, order = '' }) {
         l = await viaInternal();
         if (!l.length && key) l = await viaApi();
       }
+      if (l.token) tokens.push(l.token);
       out = mergeTracks(out, l);
     } catch (e) { lastError = e; }
-    if (out.length >= 20) break;
+    if (out.length >= TARGET) break;
+  }
+  // Pages suivantes de YouTube (applications) tant qu'il manque des titres
+  const used = new Set();
+  for (let guard = 0; out.length < TARGET && guard < 5 && !isWebApp(); guard++) {
+    const token = [...tokens].reverse().find((t) => !used.has(t)); // le plus récent d'abord
+    if (!token) break;
+    used.add(token);
+    try {
+      const more = await innertubeContinue(token, region);
+      if (more.token) tokens.push(more.token);
+      out = mergeTracks(out, more);
+    } catch (e) { lastError = e; break; }
   }
   if (out.length) { cacheSet(cacheId, out); return out; }
   // Rien de neuf : on ressort la dernière liste connue, même périmée, plutôt qu'un écran vide
