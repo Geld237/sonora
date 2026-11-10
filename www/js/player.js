@@ -158,7 +158,7 @@ class Player extends EventTarget {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: t.title,
         artist: t.artist || '',
-        album: t.album || 'Sonora',
+        album: t.album || 'Enora',
         artwork: t.cover && !t.cover.startsWith('blob:') ? [{ src: t.cover, sizes: '512x512' }] : [],
       });
     } catch (_) {}

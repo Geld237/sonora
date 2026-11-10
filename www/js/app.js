@@ -1,5 +1,5 @@
 import { db, uid } from './db.js';
-import { iaSearch, musicQuery, filmQuery, iaAlbum, iaFilm, radioSearch, ytTrending, ytNewReleases, ytSearch, getYtApiKey, getUserYtApiKey, hasBuiltInYtKey, setYtApiKey, ytMode } from './api.js';
+import { iaSearch, musicQuery, filmQuery, iaAlbum, iaFilm, radioSearch, ytTrending, ytNewReleases, ytSearch, ytStyle, getYtApiKey, getUserYtApiKey, hasBuiltInYtKey, setYtApiKey, ytMode } from './api.js';
 import { ytMedia } from './youtube-player.js';
 import { getSettings, setSetting, markSettingsChanged, settingsChangedAt, SETTINGS_TS_KEY } from './settings.js';
 import * as cloud from './cloud.js';
@@ -289,7 +289,7 @@ function hydrate(t) {
    ========================================================================= */
 let rowTracks = [];   // pistes affichées dans la vue courante
 
-function trackRows(tracks, { removable = false, playlistId = null, numbered = false } = {}) {
+function trackRows(tracks, { removable = false, playlistId = null, numbered = false, ranked = false } = {}) {
   const base = rowTracks.length;
   rowTracks.push(...tracks);
   if (!tracks.length) return '';
@@ -299,7 +299,7 @@ function trackRows(tracks, { removable = false, playlistId = null, numbered = fa
     const offline = isOffline(t);
     const canDl = !t.live && t.origin === 'archive' && !offline;
     const cover = t.cover || (t.kind === 'video' ? FALLBACK_VIDEO : FALLBACK_AUDIO);
-    return `<div class="row ${playing ? 'playing' : ''}">
+    return `<div class="row ${playing ? 'playing' : ''}">${ranked ? `<span class="rank${j < 3 ? ' top' : ''}">${j + 1}</span>` : ''}
       <div class="rc${t.kind === 'youtube' ? ' wide' : ''}">${numbered ? `<span class="muted small">${j + 1}</span>` : `<img src="${esc(cover)}" loading="lazy" onerror="this.src='${t.kind === 'video' ? FALLBACK_VIDEO : FALLBACK_AUDIO}'">`}</div>
       <div class="ri" data-act="play" data-i="${i}">
         <div class="rt ellipsis">${esc(t.title)}${t.live ? '<span class="badge">EN DIRECT</span>' : ''}${t.kind === 'video' ? '<span class="badge">VIDÉO</span>' : ''}${offline ? '<span class="badge ok">HORS-LIGNE</span>' : ''}${t.quality === 'Sans perte' ? '<span class="badge">SANS PERTE</span>' : ''}</div>
@@ -553,7 +553,7 @@ async function viewMusic(_p, seq) {
   const a = getAudioOnly();
   const title = { trend: '🔥 Tendances', new: '🆕 Nouveautés', genre: y.genre, search: `Résultats pour « ${y.term} »` }[y.mode];
   view.innerHTML = `<h1>Musique</h1>
-    <p class="sub">Les titres récents et populaires, par pays et par style, lus directement dans Sonora sans publicité.</p>
+    <p class="sub">Les titres récents et populaires, par pays et par style, lus directement dans Enora sans publicité.</p>
     <form class="searchbar" id="ysf">
       <input id="ysq" placeholder="Titre, artiste, album…" value="${esc(y.mode === 'search' ? y.term : '')}" />
       <select id="yreg" title="Pays">${YT_REGIONS.map(([c, l]) => `<option value="${c}" ${y.region === c ? 'selected' : ''}>${l}</option>`).join('')}</select>
@@ -569,7 +569,7 @@ async function viewMusic(_p, seq) {
     <div id="res">${y.items ? '' : loadingHtml()}</div>
 `;
 
-  const reload = () => { y.items = null; render(true); };
+  const reload = () => { y.items = null; y.showAll = false; render(true); };
   view.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { setAudioOnly(b.dataset.mode === 'audio'); updateNowPlaying(); render(true); }));
   view.querySelectorAll('[data-ym]').forEach((b) => (b.onclick = () => { y.mode = b.dataset.ym; reload(); }));
   view.querySelectorAll('[data-yg]').forEach((b) => (b.onclick = () => { y.mode = 'genre'; y.genre = b.dataset.yg; reload(); }));
@@ -591,14 +591,19 @@ async function viewMusic(_p, seq) {
   const loadYt = y.items ? Promise.resolve(y.items) : (
     y.mode === 'trend' ? ytTrending(y.region)
       : y.mode === 'new' ? ytNewReleases(y.region)
-      : y.mode === 'genre' ? ytSearch(`${y.genre} ${y.region === 'WW' ? '' : YT_REGIONS.find((r) => r[0] === y.region)?.[1] || ''} ${new Date().getFullYear()}`.replace(/\s+/g, ' '), y.region)
+      : y.mode === 'genre' ? ytStyle(y.region, y.genre)
       : ytSearch(y.term, y.region));
 
   const showYt = (items) => {
     const res = $('#res');
     if (!res) return;
-    res.innerHTML = items.length ? trackRows(items) : '<div class="empty">Aucun titre YouTube trouvé.</div>';
-    if (!items.length) return;
+    if (!items.length) { res.innerHTML = '<div class="empty">Aucun titre trouvé pour le moment. Réessayez dans quelques minutes ou choisissez un style.</div>'; return; }
+    // Classement : les 20 premiers, puis « Voir plus »
+    const shown = y.showAll ? items : items.slice(0, 20);
+    res.innerHTML = trackRows(shown, { ranked: true })
+      + (items.length > shown.length ? `<button class="btn ghost" id="yt-more" style="margin:12px 0 0 10px">Voir plus (${items.length - shown.length} titres)</button>` : '');
+    const more = $('#yt-more');
+    if (more) more.onclick = () => { y.showAll = true; showYt(items); };
     $('#yt-playall').disabled = false;
     $('#yt-shuffle').disabled = false;
     $('#yt-playall').onclick = () => { player.shuffle = false; if (ytDirect(items, 0)) return; player.playList(items, 0); if (!getAudioOnly()) openNowPlaying(); };
@@ -656,7 +661,7 @@ const FILM_CATS = [
 async function viewFilms(_p, seq) {
   const s = cache.films || (cache.films = { term: '', cat: FILM_CATS[0][0], items: null });
   view.innerHTML = `<h1>Films, séries et TV en direct</h1>
-    <p class="sub">Vos sites de films, de séries et de TV en direct, ouverts dans Sonora avec le bloqueur de publicités et de pop-ups, et des films classiques gratuits.</p>
+    <p class="sub">Vos sites de films, de séries et de TV en direct, ouverts dans Enora avec le bloqueur de publicités et de pop-ups, et des films classiques gratuits.</p>
     <h2>📺 Mes sites : films, séries et TV en direct</h2>
     ${sitesSectionHtml()}
     <h2>🎬 Films classiques <span class="badge ok">GRATUITS · TÉLÉCHARGEABLES</span></h2>
@@ -854,7 +859,7 @@ async function viewYouTube() {
   const a = getAudioOnly();
   view.innerHTML = `<div class="yt-card">
       <div class="big">▶️</div><h1>YouTube sans pub</h1>
-      <p class="sub">Regardez YouTube avec le bloqueur de publicités intégré à Sonora.</p>
+      <p class="sub">Regardez YouTube avec le bloqueur de publicités intégré à Enora.</p>
       <form class="searchbar" id="yt-form"><input id="yt-q" placeholder="Rechercher une vidéo, un clip…" /><button class="btn">Rechercher</button></form>
       <div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">🎬 Vidéo</button><button data-mode="audio" class="${a ? 'active' : ''}">🎧 Audio seul</button></div>
       <button class="btn ghost" id="yt-open" style="width:100%">🛡 Ouvrir YouTube</button>
@@ -1104,7 +1109,7 @@ function accountBlockHtml() {
   const fmtDate = (t) => (t ? new Date(t).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'jamais');
   if (!cloud.isConfigured()) {
     return `<div class="set-block"><h3>👤 Compte et synchronisation</h3>
-      <p class="muted">Bientôt : un compte Sonora pour retrouver vos favoris, playlists, sites et réglages sur l'ordinateur, Android et l'iPhone.</p>
+      <p class="muted">Bientôt : un compte Enora pour retrouver vos favoris, playlists, sites et réglages sur l'ordinateur, Android et l'iPhone.</p>
       <p class="muted small">Le compte n'est pas encore activé dans cette version.</p></div>`;
   }
   const sess = cloud.getSession();
@@ -1188,18 +1193,18 @@ function updateBanner() {
   }
   const u = pendingUpdate;
   bar.innerHTML = u.web
-    ? `<span>✨ Nouvelle version de Sonora disponible.</span><button class="btn" id="up-go">Recharger</button><button class="icon-btn" id="up-x" title="Plus tard">✕</button>`
+    ? `<span>✨ Nouvelle version de Enora disponible.</span><button class="btn" id="up-go">Recharger</button><button class="icon-btn" id="up-x" title="Plus tard">✕</button>`
     : u.ready
-    ? `<span>✨ Sonora ${esc(u.version)} est prête.</span><button class="btn" id="up-go">Redémarrer et installer</button><button class="icon-btn" id="up-x" title="Plus tard">✕</button>`
+    ? `<span>✨ Enora ${esc(u.version)} est prête.</span><button class="btn" id="up-go">Redémarrer et installer</button><button class="icon-btn" id="up-x" title="Plus tard">✕</button>`
     : u.downloading
-      ? `<span>⬇ Téléchargement de Sonora ${esc(u.version)}…</span><button class="icon-btn" id="up-x" title="Masquer">✕</button>`
-      : `<span>✨ Nouvelle version : Sonora ${esc(u.version)}</span><button class="btn" id="up-go">Mettre à jour</button><button class="icon-btn" id="up-x" title="Plus tard">✕</button>`;
+      ? `<span>⬇ Téléchargement de Enora ${esc(u.version)}…</span><button class="icon-btn" id="up-x" title="Masquer">✕</button>`
+      : `<span>✨ Nouvelle version : Enora ${esc(u.version)}</span><button class="btn" id="up-go">Mettre à jour</button><button class="icon-btn" id="up-x" title="Plus tard">✕</button>`;
   const go = $('#up-go', bar);
   if (go) go.onclick = () => {
     if (u.ready) { window.sonora.installUpdate(); return; }
     if (u.web) { u.worker?.postMessage('skipWaiting'); return; }
     window.open(u.url, '_blank');
-    toast(platform === 'android' ? 'Ouvrez le fichier téléchargé pour installer la mise à jour.' : platform === 'ios' ? 'Téléchargez Sonora.ipa puis réinstallez-le avec Sideloadly.' : 'Téléchargement de la nouvelle version…', 6000);
+    toast(platform === 'android' ? 'Ouvrez le fichier téléchargé pour installer la mise à jour.' : platform === 'ios' ? 'Téléchargez Enora.ipa puis réinstallez-le avec Sideloadly.' : 'Téléchargement de la nouvelle version…', 6000);
   };
   $('#up-x', bar).onclick = () => { if (!u.ready && !u.downloading) skipVersion(u.version); pendingUpdate = null; updateBanner(); };
 }
@@ -1244,11 +1249,11 @@ function updatesBlockHtml() {
     ? `<p class="muted" style="margin-top:10px">Applications à installer : <a href="${releases}" target="_blank" rel="noopener" style="color:var(--accent2)">Windows, Android et iPhone sur GitHub</a>.</p>`
     : '';
   const where = platform === 'web' ? 'Version web : mise à jour automatique à chaque ouverture.' : isStoreBuild ? 'Les mises à jour arrivent automatiquement par le Play Store.'
-    : !BUILD.repo ? 'Mises à jour : publiez Sonora sur GitHub pour les activer (voir README).'
+    : !BUILD.repo ? 'Mises à jour : publiez Enora sur GitHub pour les activer (voir README).'
       : platform === 'electron' ? 'Les nouvelles versions publiées sur GitHub sont téléchargées et installées automatiquement (version installée).'
-        : 'Sonora vérifie GitHub et vous propose les nouvelles versions.';
+        : 'Enora vérifie GitHub et vous propose les nouvelles versions.';
   return `<div class="set-block"><h3>✨ Version et mises à jour</h3>
-    <p class="muted">Sonora ${esc(currentVersion())} · ${esc(where)}</p>
+    <p class="muted">Enora ${esc(currentVersion())} · ${esc(where)}</p>
     ${!isStoreBuild && BUILD.repo && platform !== 'web' ? '<button class="btn ghost" id="up-check">Rechercher une mise à jour</button>' : ''}${others}</div>`;
 }
 
@@ -1260,10 +1265,10 @@ function bindUpdatesBlock() {
     try {
       if (platform === 'electron') {
         const r = await window.sonora.checkUpdate();
-        if (r.auto) { toast(r.version && r.version !== currentVersion() ? `Téléchargement de la version ${r.version}…` : 'Sonora est à jour ✅'); return; }
+        if (r.auto) { toast(r.version && r.version !== currentVersion() ? `Téléchargement de la version ${r.version}…` : 'Enora est à jour ✅'); return; }
       }
       const u = await checkForUpdate({ force: true });
-      if (u) { pendingUpdate = u; updateBanner(); } else toast('Sonora est à jour ✅');
+      if (u) { pendingUpdate = u; updateBanner(); } else toast('Enora est à jour ✅');
     } catch (e) { toast('Vérification impossible : ' + e.message); } finally { b.disabled = false; }
   };
 }
@@ -1327,7 +1332,7 @@ function viewSettings() {
     ${updatesBlockHtml()}
 
     <div class="set-block"><h3>ℹ️ À propos</h3>
-      <p class="muted">Sonora ${esc(currentVersion())} · Sans publicité · Sources : YouTube (lecteur officiel), Internet Archive, Radio Browser, vos fichiers.</p>
+      <p class="muted">Enora ${esc(currentVersion())} · Sans publicité · Sources : YouTube (lecteur officiel), Internet Archive, Radio Browser, vos fichiers.</p>
     </div>`;
 
   const back = $('#back');
@@ -1356,12 +1361,12 @@ function viewAbout() {
   const repo = BUILD.repo || 'Geld237/sonora';
   view.innerHTML = `
     <div class="about-hero"><span class="logo">♪</span>
-      <div><h1>Sonora</h1><div class="muted">Version ${esc(currentVersion())} · Musique, films et radio, sans publicité</div></div>
+      <div><h1>Enora</h1><div class="muted">Version ${esc(currentVersion())} · Musique, films et radio, sans publicité</div></div>
     </div>
 
-    <div class="set-block about-block"><h3>💡 Pourquoi Sonora ?</h3>
+    <div class="set-block about-block"><h3>💡 Pourquoi Enora ?</h3>
       <p>Écouter de la musique et regarder des films ne devrait pas se faire au milieu des publicités, ni dépendre d'un seul appareil.
-      Sonora réunit en une seule application la musique récente de chaque pays et de chaque style, les films, des milliers de radios
+      Enora réunit en une seule application la musique récente de chaque pays et de chaque style, les films, des milliers de radios
       et vos propres fichiers, sur l'ordinateur, Android et l'iPhone.</p>
       <p>Le projet s'appuie uniquement sur des sources légales : le lecteur officiel de YouTube, les œuvres du domaine public d'Internet Archive,
       les flux publics des radios, et vos fichiers personnels. Les artistes restent ainsi rémunérés par les plateformes qui diffusent leurs œuvres.</p>
@@ -1399,7 +1404,7 @@ function viewAbout() {
 
     <div class="set-block about-block"><h3>🙏 Sources et remerciements</h3>
       <p>YouTube (lecteur officiel et API YouTube Data) · Internet Archive (films et musique du domaine public) · Radio Browser (annuaire libre des radios) · Firebase (comptes).
-      Sonora n'est affiliée à aucun de ces services.</p>
+      Enora n'est affiliée à aucun de ces services.</p>
     </div>`;
 }
 

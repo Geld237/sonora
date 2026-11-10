@@ -1,4 +1,4 @@
-// Mises à jour de Sonora.
+// Mises à jour de Enora.
 //  - Windows (installateur) : téléchargement et installation automatiques (electron-updater, depuis GitHub Releases)
 //  - Windows portable, Android (APK GitHub), iPhone : l'application vérifie GitHub et propose la nouvelle version
 //  - Android Play Store : les mises à jour passent par le Play Store

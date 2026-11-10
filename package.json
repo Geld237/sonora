@@ -1,14 +1,14 @@
 {
   "name": "sonora",
-  "productName": "Sonora",
-  "version": "1.0.2",
-  "description": "Sonora — musique, films, radio et YouTube sans publicité, en ligne et hors-ligne (Windows + iPhone)",
+  "productName": "Enora",
+  "version": "1.1.0",
+  "description": "Enora — musique, films, radio et YouTube sans publicité, en ligne et hors-ligne (Windows + iPhone)",
   "main": "electron/main.js",
-  "author": "Sonora",
+  "author": "Enora",
   "license": "MIT",
   "scripts": {
     "start": "node scripts/gen-electron-preload.js && electron .",
-    "build:win": "node scripts/gen-electron-preload.js && electron-packager . Sonora --platform=win32 --arch=x64 --out=dist --overwrite --no-asar --app-copyright=Sonora --ignore=^/ios --ignore=^/plugins --ignore=^/dist --ignore=^/scripts --ignore=^/docs --ignore=capacitor.config.json --ignore=^/resources --ignore=^/README",
+    "build:win": "node scripts/gen-electron-preload.js && electron-packager . Enora --platform=win32 --arch=x64 --out=dist --overwrite --no-asar --app-copyright=Enora --ignore=^/ios --ignore=^/plugins --ignore=^/dist --ignore=^/scripts --ignore=^/docs --ignore=capacitor.config.json --ignore=^/resources --ignore=^/README",
     "ios:add": "npx cap add ios && npm run ios:sync",
     "ios:sync": "node scripts/setup-ios.js && npx cap sync ios",
     "ios:open": "npx cap open ios",
@@ -30,8 +30,8 @@
   },
   "build": {
     "appId": "com.sonora.app",
-    "productName": "Sonora",
-    "copyright": "Sonora",
+    "productName": "Enora",
+    "copyright": "Enora",
     "directories": {
       "output": "dist-exe"
     },
@@ -65,15 +65,15 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Sonora",
-      "artifactName": "Sonora-Setup-${version}.exe",
+      "shortcutName": "Enora",
+      "artifactName": "Enora-Setup-${version}.exe",
       "language": "1036",
       "installerLanguages": [
         "fr_FR"
       ]
     },
     "portable": {
-      "artifactName": "Sonora-Portable-${version}.exe"
+      "artifactName": "Enora-Portable-${version}.exe"
     }
   }
 }

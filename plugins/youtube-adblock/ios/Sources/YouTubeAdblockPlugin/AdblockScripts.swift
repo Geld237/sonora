@@ -5,7 +5,7 @@ import Foundation
 enum AdblockScripts {
     static let youtubeScript: String = #"""
 /*
- * Sonora — bloqueur de publicités YouTube
+ * Enora — bloqueur de publicités YouTube
  * Ce script est injecté au tout début du chargement de chaque page YouTube
  * (Windows : preload Electron / iPhone : WKUserScript).
  *

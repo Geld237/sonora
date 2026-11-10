@@ -354,11 +354,13 @@ async function apiSearch(q, { region = 'FR', recent = false, recentDays = 0, ord
     ...(days ? [{ region, recentDays: 0, order, category: false }] : []),
     { region: 'WW', recentDays: 0, order, category: false },
   ];
+  let best = [];
   for (const a of attempts) {
     const ids = await apiSearchOnce(q, a, key);
-    if (ids.length >= 5) return apiVideos(ids, key); // ajoute les durées
+    if (ids.length > best.length) best = ids;
+    if (best.length >= 10) break;
   }
-  return [];
+  return best.length ? apiVideos(best, key) : []; // ajoute les durées
 }
 
 /* ---------- Sans clé : interface interne de YouTube ---------- */
@@ -412,7 +414,10 @@ const COUNTRY_NAMES = { WW: '', FR: 'France', CI: "Côte d'Ivoire", SN: 'Sénég
 /** Recherche sans clé, élargie si un petit pays ne donne presque rien. */
 async function innertubeWide(query, { region, recent }) {
   let list = await innertubeSearch(query, { region, recent });
-  if (list.length < 5 && recent) list = await innertubeSearch(query, { region, recent: false });
+  if (list.length < 10 && recent) {
+    const more = await innertubeSearch(query, { region, recent: false }).catch(() => []);
+    list = mergeTracks(list, more);
+  }
   return list;
 }
 
@@ -420,39 +425,101 @@ async function innertubeWide(query, { region, recent }) {
 /** Mode utilisé : 'api' (clé officielle) ou 'interne' */
 export const ytMode = () => (getYtApiKey() ? 'api' : 'interne');
 
-/** Tendances musicales d'un pays. */
-export async function ytTrending(region = 'FR') {
-  const year = new Date().getFullYear();
-  const name = COUNTRY_NAMES[region] || '';
-  const q = region === 'WW' ? `top hits ${year} official music video` : `top hits ${name} ${year} clip officiel`;
-  const key = getYtApiKey();
-  if (key) {
-    try {
-      const list = await apiTrending(region, key);              // classement officiel (pas disponible partout)
-      if (list.length >= 5) return list;
-      const found = await apiSearch(q, { region, recentDays: 90, order: 'viewCount' }, key); // sinon : les plus vus des 3 derniers mois
-      if (found.length) return found;
-    } catch (e) { console.warn('API YouTube (tendances) :', e.message); }
-  }
-  return innertubeWide(q, { region, recent: true });
+// Adjectif utilisé dans les recherches (« musique camerounaise »…)
+const COUNTRY_ADJ = { FR: 'française', CI: 'ivoirienne', SN: 'sénégalaise', CM: 'camerounaise', CD: 'congolaise', BE: 'belge', CA: 'québécoise', MA: 'marocaine', ML: 'malienne', NG: 'nigériane', US: 'américaine', GB: 'britannique', HT: 'haïtienne', KM: 'comorienne', TG: 'togolaise' };
+
+/** Fusionne plusieurs listes sans doublon (même vidéo). */
+function mergeTracks(...lists) {
+  const seen = new Set();
+  const out = [];
+  for (const l of lists) for (const t of l || []) if (!seen.has(t.ytId)) { seen.add(t.ytId); out.push(t); }
+  return out;
 }
 
-/** Sorties récentes (30 derniers jours), éventuellement d'un genre. */
+/* Cache de 6 heures : les listes s'affichent tout de suite et le quota YouTube gratuit est préservé. */
+const CACHE_TTL = 6 * 3600 * 1000;
+const cacheKey = (k) => `sonora.ytcache.${k}`;
+function cacheGet(k) {
+  try { const v = JSON.parse(localStorage.getItem(cacheKey(k))); if (v && Date.now() - v.t < CACHE_TTL && v.items?.length) return v.items; } catch (_) {}
+  return null;
+}
+function cacheSet(k, items) {
+  if (!items?.length) return;
+  try { localStorage.setItem(cacheKey(k), JSON.stringify({ t: Date.now(), items })); } catch (_) {
+    // stockage plein : on vide l'ancien cache
+    try { Object.keys(localStorage).filter((x) => x.startsWith('sonora.ytcache.')).forEach((x) => localStorage.removeItem(x)); } catch (_) {}
+  }
+}
+
+/**
+ * Cherche avec plusieurs formulations et fusionne les résultats jusqu'à au moins 20 titres.
+ * Si YouTube ne répond pas, la dernière liste connue (même ancienne) est affichée.
+ */
+async function multiSearch(cacheId, queries, { region, recent, order = '' }) {
+  const cached = cacheGet(cacheId);
+  if (cached) return cached;
+  const key = getYtApiKey();
+  let out = [];
+  let lastError = null;
+  for (const q of queries) {
+    try {
+      let l = [];
+      if (key) {
+        try { l = await apiSearch(q, { region, recent, recentDays: recent ? 60 : 0, order }, key); } catch (e) { lastError = e; }
+      }
+      if (!l.length) l = await innertubeWide(q, { region, recent });
+      out = mergeTracks(out, l);
+    } catch (e) { lastError = e; }
+    if (out.length >= 20) break;
+  }
+  if (out.length) { cacheSet(cacheId, out); return out; }
+  // Rien de neuf : on ressort la dernière liste connue, même périmée, plutôt qu'un écran vide
+  try { const v = JSON.parse(localStorage.getItem(cacheKey(cacheId))); if (v?.items?.length) return v.items; } catch (_) {}
+  if (lastError) throw lastError;
+  return [];
+}
+
+/** Tendances musicales d'un pays (ou du monde). */
+export async function ytTrending(region = 'FR') {
+  const year = new Date().getFullYear();
+  const id = `trend.${region}.${new Date().toISOString().slice(0, 10)}`;
+  const cached = cacheGet(id);
+  if (cached) return cached;
+  const key = getYtApiKey();
+  if (key && region !== 'WW') {
+    try {
+      const official = await apiTrending(region, key); // classement officiel (pas disponible dans tous les pays)
+      if (official.length >= 10) { cacheSet(id, official); return official; }
+    } catch (e) { console.warn('API YouTube (tendances) :', e.message); }
+  }
+  const name = COUNTRY_NAMES[region] || '';
+  const adj = COUNTRY_ADJ[region] || '';
+  const queries = region === 'WW'
+    ? [`top hits ${year} official music video`, `most viewed music videos ${year}`, `global top songs ${year}`]
+    : [`top hits ${name} ${year}`, `musique ${adj} ${year}`, `${name} clip officiel ${year}`, `meilleures chansons ${adj}`];
+  return multiSearch(id, queries, { region, recent: true, order: 'viewCount' });
+}
+
+/** Sorties récentes, éventuellement d'un genre. */
 export async function ytNewReleases(region = 'FR', genre = '') {
   const name = COUNTRY_NAMES[region] || '';
-  const q = `${genre || (region === 'WW' ? 'new music' : 'nouveauté musique')} ${name} clip officiel`.replace(/\s+/g, ' ').trim();
-  const key = getYtApiKey();
-  if (key) {
-    try { const l = await apiSearch(q, { region, recent: true, order: 'viewCount' }, key); if (l.length) return l; } catch (e) { console.warn('API YouTube (nouveautés) :', e.message); }
-  }
-  return innertubeWide(q, { region, recent: true });
+  const adj = COUNTRY_ADJ[region] || '';
+  const base = genre || (region === 'WW' ? 'new music' : `nouveauté musique ${adj}`);
+  const queries = [`${base} ${name} clip officiel`, `${base} ${new Date().getFullYear()}`, `${genre || 'nouveau clip'} ${name}`]
+    .map((q) => q.replace(/\s+/g, ' ').trim());
+  return multiSearch(`new.${region}.${genre}`, queries, { region, recent: true, order: 'viewCount' });
+}
+
+/** Style musical d'un pays (Makossa au Cameroun, Twarab aux Comores…). */
+export async function ytStyle(region = 'FR', style = '') {
+  const name = region === 'WW' ? '' : (COUNTRY_NAMES[region] || '');
+  const year = new Date().getFullYear();
+  const queries = [`${style} ${name} ${year}`, `${style} ${name} clip officiel`, `${style} ${name}`, `${style}`]
+    .map((q) => q.replace(/\s+/g, ' ').trim());
+  return multiSearch(`style.${region}.${style}`, [...new Set(queries)], { region, recent: false });
 }
 
 /** Recherche libre (titre, artiste…). */
 export async function ytSearch(q, region = 'FR') {
-  const key = getYtApiKey();
-  if (key) {
-    try { const l = await apiSearch(q, { region }, key); if (l.length) return l; } catch (e) { console.warn('API YouTube (recherche) :', e.message); }
-  }
-  return innertubeWide(q, { region, recent: false });
+  return multiSearch(`search.${region}.${q.toLowerCase()}`, [q], { region, recent: false });
 }

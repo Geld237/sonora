@@ -1,4 +1,4 @@
-// Compte Sonora et synchronisation entre appareils (Windows, Android, iPhone).
+// Compte Enora et synchronisation entre appareils (Windows, Android, iPhone).
 // Service : Firebase (gratuit) — Authentication (e-mail + mot de passe) et Cloud Firestore.
 // Les appels se font par les API REST officielles de Firebase : aucune bibliothèque à installer.
 //

@@ -249,3 +249,7 @@ body.store-build .nav-item[data-view="youtube"] { display: none; }
 .author { display: flex; align-items: center; gap: 14px; }
 .author .av { width: 52px; height: 52px; border-radius: 50%; background: var(--grad); display: grid; place-items: center; font-weight: 800; font-size: 20px; color: #fff; flex-shrink: 0; }
 .author a { color: var(--accent2); text-decoration: none; font-weight: 600; }
+
+/* ---------- Classement (Musique) ---------- */
+.row .rank { width: 26px; flex-shrink: 0; text-align: center; font-weight: 800; font-size: 15px; color: var(--muted); }
+.row .rank.top { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 17px; }

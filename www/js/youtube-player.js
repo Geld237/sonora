@@ -1,5 +1,5 @@
 // Lecteur YouTube officiel (API IFrame) présenté comme un élément <audio>/<video>.
-// Il permet au lecteur de Sonora (file d'attente, suivant, précédent…) de lire des titres YouTube.
+// Il permet au lecteur de Enora (file d'attente, suivant, précédent…) de lire des titres YouTube.
 // La lecture passe par le lecteur officiel de YouTube : c'est ce qui la rend légale.
 
 const HOST_ID = 'yt-host';

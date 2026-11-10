@@ -1,4 +1,4 @@
-// Sonora — version Windows (Electron)
+// Enora — version Windows (Electron)
 const { app, BrowserWindow, session, protocol, net, shell, ipcMain } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -74,6 +74,10 @@ function installAdblock(ses) {
   });
 }
 
+// L'application s'appelait « Sonora » : on garde le même dossier de données pour ne rien perdre
+// (bibliothèque hors-ligne, favoris, playlists, réglages, connexion au compte).
+app.setPath('userData', path.join(app.getPath('appData'), 'Sonora'));
+
 // Protocole app:// pour servir l'interface (nécessaire pour les modules JavaScript)
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
@@ -88,7 +92,7 @@ function createWindow() {
     height: 820,
     minWidth: 380,
     minHeight: 600,
-    title: 'Sonora',
+    title: 'Enora',
     backgroundColor: '#0e0f14',
     autoHideMenuBar: true,
     icon: path.join(WWW, 'icon.png'),

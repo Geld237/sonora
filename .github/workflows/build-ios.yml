@@ -1,4 +1,4 @@
-# Compile l'application iPhone sur un Mac de GitHub (gratuit) et fournit un fichier Sonora.ipa
+# Compile l'application iPhone sur un Mac de GitHub (gratuit) et fournit un fichier Enora.ipa
 # à installer depuis Windows avec Sideloadly. Lancement : onglet « Actions » > « Build iOS » > « Run workflow ».
 name: Build iOS
 
@@ -39,12 +39,12 @@ jobs:
             build
           mkdir -p Payload
           cp -R build/Build/Products/Release-iphoneos/App.app Payload/
-          zip -qry Sonora.ipa Payload
-          ls -lh Sonora.ipa
+          zip -qry Enora.ipa Payload
+          ls -lh Enora.ipa
 
-      - name: Envoyer le fichier Sonora.ipa
+      - name: Envoyer le fichier Enora.ipa
         uses: actions/upload-artifact@v4
         with:
-          name: Sonora-ipa
-          path: ios/App/Sonora.ipa
+          name: Enora-ipa
+          path: ios/App/Enora.ipa
           retention-days: 14

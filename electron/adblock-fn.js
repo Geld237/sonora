@@ -1,7 +1,7 @@
 // Fichier généré automatiquement par scripts/gen-electron-preload.js — ne pas modifier à la main.
 module.exports = function sonoraAdblock() {
 /*
- * Sonora — bloqueur de publicités YouTube
+ * Enora — bloqueur de publicités YouTube
  * Ce script est injecté au tout début du chargement de chaque page YouTube
  * (Windows : preload Electron / iPhone : WKUserScript).
  *

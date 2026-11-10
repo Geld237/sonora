@@ -1,9 +1,9 @@
 {
   "name": "capacitor-youtube-adblock",
   "version": "1.0.0",
-  "description": "Sonora - navigateur YouTube avec bloqueur de publicites pour iOS",
+  "description": "Enora - navigateur YouTube avec bloqueur de publicites pour iOS",
   "main": "dist/index.js",
-  "author": "Sonora",
+  "author": "Enora",
   "license": "MIT",
   "repository": {
     "type": "git",

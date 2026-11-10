@@ -1,5 +1,5 @@
 // Service worker de la version web (PWA) : l'application s'ouvre même sans connexion.
-// Les fichiers de Sonora sont gardés en cache ; les contenus en ligne (YouTube, radios, films) ne le sont pas.
+// Les fichiers de Enora sont gardés en cache ; les contenus en ligne (YouTube, radios, films) ne le sont pas.
 const VERSION = 'sonora-__BUILD__';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',

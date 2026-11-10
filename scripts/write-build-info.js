@@ -10,7 +10,7 @@ const repo = process.env.GITHUB_REPOSITORY || '';
 // Les applications Windows / Android / iPhone n'en ont pas besoin (méthode sans clé).
 const ytKey = channel === 'web' ? (process.env.YOUTUBE_API_KEY || '').trim() : '';
 const info = { version, repo, channel };
-// Compte Sonora : identifiants Firebase (secrets GitHub FIREBASE_API_KEY et FIREBASE_PROJECT_ID), pour toutes les versions
+// Compte Enora : identifiants Firebase (secrets GitHub FIREBASE_API_KEY et FIREBASE_PROJECT_ID), pour toutes les versions
 const fbKey = (process.env.FIREBASE_API_KEY || '').trim();
 const fbProject = (process.env.FIREBASE_PROJECT_ID || '').trim();
 if (fbKey && fbProject) info.firebase = { apiKey: fbKey, projectId: fbProject };

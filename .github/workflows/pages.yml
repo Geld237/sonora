@@ -1,4 +1,4 @@
-# Publie la version web installable (PWA) de Sonora sur GitHub Pages à chaque envoi sur la branche main.
+# Publie la version web installable (PWA) de Enora sur GitHub Pages à chaque envoi sur la branche main.
 # Prérequis (une seule fois) : Settings > Pages > Source : « GitHub Actions ».
 name: Site web (PWA)
 
@@ -16,7 +16,7 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
-# Compte Sonora (Firebase) : identifiants lus dans les secrets du dépôt
+# Compte Enora (Firebase) : identifiants lus dans les secrets du dépôt
 env:
   FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
   FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}

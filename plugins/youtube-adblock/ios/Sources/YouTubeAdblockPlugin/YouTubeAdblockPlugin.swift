@@ -18,7 +18,7 @@ public class YouTubeAdblockPlugin: CAPPlugin, CAPBridgedPlugin {
             // Pas de setActive ici : on ne coupe pas la musique des autres applis au lancement
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
         } catch {
-            print("Sonora: AVAudioSession error \(error)")
+            print("Enora: AVAudioSession error \(error)")
         }
         // Prépare les règles de blocage à l'avance
         YouTubeAdblockRules.load { _ in }

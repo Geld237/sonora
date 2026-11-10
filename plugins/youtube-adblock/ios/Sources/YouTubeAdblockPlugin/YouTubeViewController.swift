@@ -21,7 +21,7 @@ enum YouTubeAdblockRules {
                 encodedContentRuleList: AdblockScripts.contentRules
             ) { list, error in
                 DispatchQueue.main.async {
-                    if let error = error { print("Sonora: règles non compilées \(error)") }
+                    if let error = error { print("Enora: règles non compilées \(error)") }
                     YouTubeAdblockRules.cached = list
                     YouTubeAdblockRules.compiling = false
                     let callbacks = YouTubeAdblockRules.waiting
