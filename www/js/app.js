@@ -4,6 +4,7 @@ import { ytMedia } from './youtube-player.js';
 import { getSettings, setSetting, markSettingsChanged, settingsChangedAt, SETTINGS_TS_KEY } from './settings.js';
 import * as cloud from './cloud.js';
 import { BUILD } from './build-info.js';
+import { I, ic } from './icons.js';
 import { checkForUpdate, skipVersion, currentVersion } from './updates.js';
 import { player, videoElement } from './player.js';
 import { platform, isMobile, openYouTubeNative, openWebNative } from './platform.js';
@@ -21,8 +22,8 @@ const fmtTime = (s) => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 };
 const fmtSize = (b) => (b > 1e9 ? (b / 1e9).toFixed(1) + ' Go' : b > 1e6 ? (b / 1e6).toFixed(1) + ' Mo' : Math.max(1, Math.round(b / 1e3)) + ' Ko');
-const FALLBACK_AUDIO = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs><rect width="100" height="100" fill="url(#g)"/><text x="50" y="64" font-size="44" text-anchor="middle" fill="white">♪</text></svg>');
-const FALLBACK_VIDEO = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#1f2230"/><text x="50" y="62" font-size="38" text-anchor="middle" fill="#9097ad">🎬</text></svg>');
+const FALLBACK_AUDIO = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#2c2c2e"/><g fill="none" stroke="#8e8e93" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M42 66V36l24-5v30"/><circle cx="36" cy="66" r="6"/><circle cx="60" cy="61" r="6"/></g></svg>');
+const FALLBACK_VIDEO = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#2c2c2e"/><g fill="none" stroke="#8e8e93" stroke-width="4" stroke-linejoin="round"><rect x="26" y="32" width="48" height="36" rx="6"/><path d="M45 43l12 7-12 7z" fill="#8e8e93"/></g></svg>');
 
 let toastTimer;
 function toast(msg, ms = 2600) {
@@ -195,7 +196,7 @@ async function downloadTrack(track) {
       sourceKey: track.key, src: track.src, cover: track.cover, coverBlob, size: blob.size, addedAt: Date.now(),
     });
     await loadState();
-    toast(`✓ « ${track.title} » est disponible hors-ligne`);
+    toast(`« ${track.title} » est disponible hors ligne`);
     render(true);
   } catch (e) {
     console.error(e);
@@ -231,7 +232,7 @@ async function toggleFav(type, key, data) {
     await db.put('favs', f);
     cloud.touch();
     state.favs.set(key, f);
-    toast('♥ Ajouté aux favoris');
+    toast('Ajouté aux favoris');
   }
   updateNowPlaying();
 }
@@ -249,9 +250,9 @@ const storableTrack = (t) => {
 };
 
 async function addToPlaylist(track) {
-  const list = state.playlists.map((p) => `<button class="pl-pick" data-pl="${p.id}">🎶 ${esc(p.name)} <span class="muted small">(${p.tracks.length})</span></button>`).join('');
+  const list = state.playlists.map((p) => `<button class="pl-pick" data-pl="${p.id}">${esc(p.name)} <span class="muted small">(${p.tracks.length})</span></button>`).join('');
   const card = modal(`<h3>Ajouter à une playlist</h3>${list || '<p class="muted">Aucune playlist pour le moment.</p>'}
-    <button class="pl-pick" id="pl-new">＋ Nouvelle playlist</button>
+    <button class="pl-pick" id="pl-new">Nouvelle playlist…</button>
     <div class="modal-actions"><button class="btn ghost" id="pl-cancel">Fermer</button></div>`);
   $('#pl-cancel', card).onclick = closeModal;
   card.querySelectorAll('[data-pl]').forEach((b) => {
@@ -289,7 +290,7 @@ function hydrate(t) {
    ========================================================================= */
 let rowTracks = [];   // pistes affichées dans la vue courante
 
-function trackRows(tracks, { removable = false, playlistId = null, numbered = false, ranked = false } = {}) {
+function trackRows(tracks, { removable = false, playlistId = null, numbered = false, ranked = false, hideable = false } = {}) {
   const base = rowTracks.length;
   rowTracks.push(...tracks);
   if (!tracks.length) return '';
@@ -306,12 +307,13 @@ function trackRows(tracks, { removable = false, playlistId = null, numbered = fa
         <div class="ra ellipsis">${esc(t.artist || '')}${t.duration ? ' · ' + fmtTime(t.duration) : ''}</div>
       </div>
       <div class="acts">
-        <button class="icon-btn ${isFav(t.key) ? 'on' : ''}" data-act="fav" data-i="${i}" title="Favori">${isFav(t.key) ? '♥' : '♡'}</button>
-        ${canDl ? `<button class="icon-btn" data-act="dl" data-i="${i}" title="Télécharger pour le hors-ligne">⬇</button>` : ''}
-        <button class="icon-btn" data-act="queue" data-i="${i}" title="Lire ensuite">⤵</button>
-        ${t.live ? '' : `<button class="icon-btn" data-act="addpl" data-i="${i}" title="Ajouter à une playlist">＋</button>`}
-        ${removable && t.mediaId ? `<button class="icon-btn" data-act="del" data-i="${i}" title="Supprimer">🗑</button>` : ''}
-        ${playlistId ? `<button class="icon-btn" data-act="plrm" data-i="${i}" data-pl="${playlistId}" title="Retirer de la playlist">✕</button>` : ''}
+        <button class="icon-btn ${isFav(t.key) ? 'on' : ''}" data-act="fav" data-i="${i}" title="Favori">${isFav(t.key) ? I.heartFill : I.heart}</button>
+        ${canDl ? `<button class="icon-btn" data-act="dl" data-i="${i}" title="Télécharger pour écouter hors ligne">${I.download}</button>` : ''}
+        <button class="icon-btn" data-act="queue" data-i="${i}" title="Lire ensuite">${I.queue}</button>
+        ${t.live ? '' : `<button class="icon-btn" data-act="addpl" data-i="${i}" title="Ajouter à une playlist">${I.plus}</button>`}
+        ${removable && t.mediaId ? `<button class="icon-btn" data-act="del" data-i="${i}" title="Supprimer">${I.trash}</button>` : ''}
+        ${playlistId ? `<button class="icon-btn" data-act="plrm" data-i="${i}" data-pl="${playlistId}" title="Retirer de la playlist">${I.close}</button>` : ''}
+        ${hideable ? `<button class="icon-btn hide-btn" data-act="hide" data-i="${i}" title="Retirer ce titre des résultats">${I.minus}</button>` : ''}
       </div>
     </div>`;
   }).join('')}</div>`;
@@ -344,6 +346,13 @@ view.addEventListener('click', async (e) => {
     case 'queue': player.addToQueue(t); toast('Sera lu ensuite'); break;
     case 'addpl': addToPlaylist(t); break;
     case 'del': deleteMedia(t.mediaId); break;
+    case 'hide': {
+      hideTrack(t);
+      const undo = () => { unhideTrack(t.ytId || t.key); refreshMusicList(); };
+      toastAction(`« ${t.title} » retiré des résultats`, 'Annuler', undo);
+      refreshMusicList();
+      break;
+    }
     case 'plrm': {
       const p = state.playlists.find((x) => x.id === el.dataset.pl);
       p.tracks = p.tracks.filter((x) => x.key !== t.key);
@@ -354,6 +363,43 @@ view.addEventListener('click', async (e) => {
     default: break;
   }
 });
+
+/* =========================================================================
+   Titres retirés des résultats (bouton « − ») et recherche « -mot »
+   ========================================================================= */
+const HIDDEN_KEY = 'sonora.hidden';
+function getHidden() { try { return JSON.parse(localStorage.getItem(HIDDEN_KEY)) || {}; } catch (_) { return {}; } }
+function setHidden(h) { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(h)); } catch (_) {} markSettingsChanged(); cloud.touch(); }
+function hideTrack(t) { const h = getHidden(); h[t.ytId || t.key] = { title: t.title, artist: t.artist || '', t: Date.now() }; setHidden(h); }
+function unhideTrack(id) { const h = getHidden(); delete h[id]; setHidden(h); }
+
+/** Sépare « afro -live -remix » en { query: 'afro', exclude: ['live', 'remix'] } */
+function parseQuery(raw) {
+  const words = String(raw || '').trim().split(/\s+/).filter(Boolean);
+  const exclude = words.filter((w) => w.length > 1 && w.startsWith('-')).map((w) => w.slice(1).toLowerCase());
+  const query = words.filter((w) => !(w.length > 1 && w.startsWith('-'))).join(' ');
+  return { query, exclude };
+}
+const fold = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+/** Applique les titres retirés et les mots exclus à une liste de résultats. */
+function filterResults(items, exclude = []) {
+  const h = getHidden();
+  const ex = exclude.map(fold);
+  return items.filter((t) => !h[t.ytId || t.key] && !ex.some((w) => fold(`${t.title} ${t.artist}`).includes(w)));
+}
+
+let refreshMusicList = () => {};
+
+/** Message avec un bouton (ex. « Annuler »). */
+function toastAction(msg, label, fn, ms = 5000) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${esc(msg)}</span> <button class="toast-btn" id="toast-act">${esc(label)}</button>`;
+  t.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  $('#toast-act').onclick = () => { t.classList.add('hidden'); fn(); };
+  toastTimer = setTimeout(() => t.classList.add('hidden'), ms);
+}
 
 /* =========================================================================
    Navigation
@@ -405,7 +451,7 @@ async function viewLibrary() {
     const total = state.media.reduce((s, m) => s + (m.size || 0), 0);
     body = `
       <div class="drop" id="drop">
-        <div style="font-size:30px">📥</div>
+        <div class="drop-ic">${I.upload}</div>
         <div style="margin:6px 0 12px">Importez votre musique et vos vidéos pour les écouter <b>sans internet</b>.</div>
         <button class="btn" id="import-btn">Importer des fichiers</button>
         <div class="small" style="margin-top:10px">${platform === 'electron' ? 'Vous pouvez aussi glisser-déposer des fichiers ici.' : 'MP3, M4A, WAV, FLAC, MP4, MOV…'}</div>
@@ -414,26 +460,26 @@ async function viewLibrary() {
         ${[['all', 'Tout'], ['audio', 'Musique'], ['video', 'Vidéos']].map(([k, l]) => `<button class="chip ${libFilter === k ? 'active' : ''}" data-filter="${k}">${l}</button>`).join('')}
       </div>
       ${items.length ? `<p class="muted small">${items.length} élément(s) · ${fmtSize(total)} utilisés</p>${trackRows(items.map(mediaToTrack), { removable: true })}`
-        : '<div class="empty"><div class="big">🎧</div>Rien ici pour l\'instant.<br>Importez des fichiers ou téléchargez des titres depuis l\'onglet Musique ou Films (bouton ⬇).</div>'}`;
+        : '<div class="empty"><div class="big">${I.note}</div>Rien ici pour l\'instant.<br>Importez des fichiers ou téléchargez des titres depuis l\'onglet Films &amp; TV.</div>'}`;
   } else if (libTab === 'favs') {
     const favs = [...state.favs.values()].sort((a, b) => b.addedAt - a.addedAt);
     const tracks = favs.filter((f) => f.type === 'track' || f.type === 'radio').map((f) => hydrate(f.data));
     const albums = favs.filter((f) => f.type === 'album');
     const films = favs.filter((f) => f.type === 'film');
-    body = !favs.length ? '<div class="empty"><div class="big">♡</div>Aucun favori.<br>Touchez ♡ sur un titre, une radio, un album ou un film.</div>' : `
+    body = !favs.length ? `<div class="empty"><div class="big">${I.heart}</div>Aucun favori.<br>Touchez le cœur à côté d'un titre, d'une radio, d'un album ou d'un film.</div>` : `
       ${tracks.length ? `<h2>Titres et radios</h2>${trackRows(tracks)}` : ''}
       ${albums.length ? `<h2>Albums</h2><div class="grid">${albums.map((f) => card(f.data, 'album')).join('')}</div>` : ''}
       ${films.length ? `<h2>Films</h2><div class="grid">${films.map((f) => card(f.data, 'film')).join('')}</div>` : ''}`;
   } else {
-    body = `<button class="btn" id="new-pl" style="margin-bottom:16px">＋ Nouvelle playlist</button>
+    body = `<button class="btn" id="new-pl" style="margin-bottom:16px">Nouvelle playlist</button>
       ${state.playlists.length ? `<div class="list">${state.playlists.map((p) => `
-        <div class="row"><div class="rc">🎶</div>
+        <div class="row"><div class="rc">${I.music}</div>
           <div class="ri" data-open-pl="${p.id}"><div class="rt">${esc(p.name)}</div><div class="ra">${p.tracks.length} titre(s)</div></div>
-          <div class="acts"><button class="icon-btn" data-play-pl="${p.id}" title="Lire">▶</button><button class="icon-btn" data-del-pl="${p.id}" title="Supprimer">🗑</button></div>
-        </div>`).join('')}</div>` : '<div class="empty"><div class="big">🎶</div>Créez votre première playlist.</div>'}`;
+          <div class="acts"><button class="icon-btn" data-play-pl="${p.id}" title="Lire">${I.play}</button><button class="icon-btn" data-del-pl="${p.id}" title="Supprimer">${I.trash}</button></div>
+        </div>`).join('')}</div>` : `<div class="empty"><div class="big">${I.music}</div>Créez votre première playlist.</div>`}`;
   }
 
-  view.innerHTML = `<div class="h1row"><h1>Bibliothèque</h1><button class="icon-btn" id="open-settings" title="Réglages">⚙️</button></div><p class="sub">Votre musique, vos vidéos, vos favoris — toujours sans publicité.</p>${seg}${body}`;
+  view.innerHTML = `<div class="h1row"><h1>Bibliothèque</h1><button class="icon-btn" id="open-settings" title="Réglages">${I.settings}</button></div><p class="sub">Votre musique, vos vidéos, vos favoris — toujours sans publicité.</p>${seg}${body}`;
 
   view.querySelectorAll('[data-lib]').forEach((b) => (b.onclick = () => { libTab = b.dataset.lib; render(); }));
   $('#open-settings').onclick = () => go('settings', { tab: isMobile ? 'library' : 'settings' });
@@ -475,13 +521,13 @@ async function viewPlaylist({ id }) {
   const p = state.playlists.find((x) => x.id === id);
   if (!p) { libTab = 'playlists'; return go('library'); }
   const tracks = p.tracks.map(hydrate);
-  view.innerHTML = `<button class="back" id="back">← Playlists</button>
-    <div class="detail"><div class="dc" style="display:grid;place-items:center;font-size:70px;background:var(--grad)">🎶</div>
+  view.innerHTML = `<button class="back" id="back">${I.chevronLeft}<span>Playlists</span></button>
+    <div class="detail"><div class="dc" style="display:grid;place-items:center;background:var(--bg3);color:var(--accent)">${I.note}</div>
       <div class="di"><div class="muted small">PLAYLIST</div><h1>${esc(p.name)}</h1><div class="muted">${tracks.length} titre(s)</div>
         <div class="actions"><button class="btn" id="pl-play" ${tracks.length ? '' : 'disabled'}>▶ Tout lire</button>
-        <button class="btn ghost" id="pl-shuffle" ${tracks.length ? '' : 'disabled'}>🔀 Aléatoire</button>
-        <button class="btn ghost" id="pl-rename">✎ Renommer</button></div></div></div>
-    ${tracks.length ? trackRows(tracks, { playlistId: p.id }) : '<div class="empty">Ajoutez des titres avec le bouton ＋.</div>'}`;
+        <button class="btn ghost" id="pl-shuffle" ${tracks.length ? '' : 'disabled'}>Aléatoire</button>
+        <button class="btn ghost" id="pl-rename">Renommer</button></div></div></div>
+    ${tracks.length ? trackRows(tracks, { playlistId: p.id }) : '<div class="empty">Ajoutez des titres avec le bouton « Ajouter à une playlist ».</div>'}`;
   $('#back').onclick = () => { libTab = 'playlists'; go('library'); };
   $('#pl-play').onclick = () => player.playList(tracks);
   $('#pl-shuffle').onclick = () => { player.shuffle = true; player.playList(tracks, Math.floor(Math.random() * tracks.length)); };
@@ -543,7 +589,7 @@ const STYLES_BY_COUNTRY = {
 const YT_MUSIC_CHIPS = STYLES_BY_COUNTRY.FR;
 const stylesFor = (region) => STYLES_BY_COUNTRY[region] || STYLES_BY_COUNTRY.FR;
 
-const YT_REGIONS = [['WW', '🌍 Monde'], ['FR', 'France'], ['CI', "Côte d'Ivoire"], ['SN', 'Sénégal'], ['CM', 'Cameroun'], ['CD', 'RD Congo'], ['BE', 'Belgique'], ['CA', 'Canada'], ['MA', 'Maroc'], ['ML', 'Mali'], ['NG', 'Nigeria'], ['HT', 'Haïti'], ['KM', 'Comores'], ['TG', 'Togo'], ['US', 'États-Unis'], ['GB', 'Royaume-Uni']];
+const YT_REGIONS = [['WW', 'Monde'], ['FR', 'France'], ['CI', "Côte d'Ivoire"], ['SN', 'Sénégal'], ['CM', 'Cameroun'], ['CD', 'RD Congo'], ['BE', 'Belgique'], ['CA', 'Canada'], ['MA', 'Maroc'], ['ML', 'Mali'], ['NG', 'Nigeria'], ['HT', 'Haïti'], ['KM', 'Comores'], ['TG', 'Togo'], ['US', 'États-Unis'], ['GB', 'Royaume-Uni']];
 
 
 /** Onglet Musique : YouTube (titres récents, streaming) + Musique libre (albums téléchargeables) réunis. */
@@ -551,21 +597,21 @@ async function viewMusic(_p, seq) {
   const s = cache.music || (cache.music = {});
   const y = s.yt || (s.yt = { mode: 'trend', region: 'FR', genre: '', term: '', items: null, error: null });
   const a = getAudioOnly();
-  const title = { trend: '🔥 Tendances', new: '🆕 Nouveautés', genre: y.genre, search: `Résultats pour « ${y.term} »` }[y.mode];
+  const title = { trend: 'Tendances', new: 'Nouveautés', genre: y.genre, search: `Résultats pour « ${y.term} »` }[y.mode];
   view.innerHTML = `<h1>Musique</h1>
     <p class="sub">Les titres récents et populaires, par pays et par style, lus directement dans Enora sans publicité.</p>
     <form class="searchbar" id="ysf">
-      <input id="ysq" placeholder="Titre, artiste, album…" value="${esc(y.mode === 'search' ? y.term : '')}" />
+      <input id="ysq" placeholder="Titre, artiste… (ajoutez -mot pour exclure)" value="${esc(y.raw || (y.mode === 'search' ? y.term : ''))}" />
       <select id="yreg" title="Pays">${YT_REGIONS.map(([c, l]) => `<option value="${c}" ${y.region === c ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <button class="btn">Rechercher</button></form>
-    <div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">🎬 Vidéo</button><button data-mode="audio" class="${a ? 'active' : ''}">🎧 Audio seul</button></div>
+    <div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">${ic('video', 'Vidéo')}</button><button data-mode="audio" class="${a ? 'active' : ''}">${ic('headphones', 'Audio seul')}</button></div>
     <div class="chips">
-      <button class="chip ${y.mode === 'trend' ? 'active' : ''}" data-ym="trend">🔥 Tendances</button>
-      <button class="chip ${y.mode === 'new' ? 'active' : ''}" data-ym="new">🆕 Nouveautés</button>
+      <button class="chip ${y.mode === 'trend' ? 'active' : ''}" data-ym="trend">Tendances</button>
+      <button class="chip ${y.mode === 'new' ? 'active' : ''}" data-ym="new">Nouveautés</button>
       ${stylesFor(y.region).map((c) => `<button class="chip ${y.mode === 'genre' && y.genre === c ? 'active' : ''}" data-yg="${esc(c)}">${esc(c)}</button>`).join('')}
     </div>
     <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${esc(title)}
-      <button class="btn" id="yt-playall" style="font-size:14px" disabled>▶ Tout lire</button><button class="btn ghost" id="yt-shuffle" style="font-size:14px" disabled>🔀 Aléatoire</button></h2>
+      <button class="btn" id="yt-playall" style="font-size:14px" disabled>${ic('play', 'Tout lire')}</button><button class="btn ghost" id="yt-shuffle" style="font-size:14px" disabled>${ic('shuffle', 'Aléatoire')}</button></h2>
     <div id="res">${y.items ? '' : loadingHtml()}</div>
 `;
 
@@ -583,7 +629,9 @@ async function viewMusic(_p, seq) {
     e.preventDefault();
     const q = $('#ysq').value.trim();
     y.region = $('#yreg').value;
-    if (q) { y.mode = 'search'; y.term = q; } else if (y.mode === 'search') y.mode = 'trend';
+    const pq = parseQuery(q);
+    y.exclude = pq.exclude;
+    if (pq.query) { y.mode = 'search'; y.term = pq.query; y.raw = q; } else if (y.mode === 'search' || pq.exclude.length) { if (!pq.exclude.length) y.mode = 'trend'; }
     reload();
   };
 
@@ -594,13 +642,16 @@ async function viewMusic(_p, seq) {
       : y.mode === 'genre' ? ytStyle(y.region, y.genre)
       : ytSearch(y.term, y.region));
 
-  const showYt = (items) => {
+  const showYt = (all) => {
     const res = $('#res');
     if (!res) return;
+    const items = filterResults(all, y.exclude || []);
+    refreshMusicList = () => showYt(all);
     if (!items.length) { res.innerHTML = '<div class="empty">Aucun titre trouvé pour le moment. Réessayez dans quelques minutes ou choisissez un style.</div>'; return; }
     // Classement : les 20 premiers, puis « Voir plus »
     const shown = y.showAll ? items : items.slice(0, 20);
-    res.innerHTML = trackRows(shown, { ranked: true })
+    rowTracks = [];
+    res.innerHTML = trackRows(shown, { ranked: true, hideable: true })
       + (items.length > shown.length ? `<button class="btn ghost" id="yt-more" style="margin:12px 0 0 10px">Voir plus (${items.length - shown.length} titres)</button>` : '');
     const more = $('#yt-more');
     if (more) more.onclick = () => { y.showAll = true; showYt(items); };
@@ -617,19 +668,19 @@ async function viewMusic(_p, seq) {
 }
 
 async function viewAlbum({ id, from }, seq) {
-  view.innerHTML = `<button class="back" id="back">← Retour</button>${loadingHtml()}`;
+  view.innerHTML = `<button class="back" id="back">${I.chevronLeft}<span>Retour</span></button>${loadingHtml()}`;
   $('#back').onclick = () => go(from === 'library' ? 'library' : 'music');
   try {
     const a = await iaAlbum(id);
     if (stale(seq)) return;
     const favData = { id: a.id, title: a.title, creator: a.artist, cover: a.cover };
-    view.innerHTML = `<button class="back" id="back">← Retour</button>
+    view.innerHTML = `<button class="back" id="back">${I.chevronLeft}<span>Retour</span></button>
       <div class="detail"><div class="dc" style="background-image:url('${esc(a.cover)}')"></div>
         <div class="di"><div class="muted small">ALBUM</div><h1>${esc(a.title)}</h1><div class="muted">${esc(a.artist)}${a.year ? ' · ' + esc(a.year) : ''} · ${a.tracks.length} titre(s)</div>
           <div class="actions">
             <button class="btn" id="a-play" ${a.tracks.length ? '' : 'disabled'}>▶ Lire</button>
-            <button class="btn ghost" id="a-dl" ${a.tracks.length ? '' : 'disabled'}>⬇ Tout télécharger</button>
-            <button class="btn ghost" id="a-fav">${isFav('album:' + a.id) ? '♥ Favori' : '♡ Favori'}</button>
+            <button class="btn ghost" id="a-dl" ${a.tracks.length ? '' : 'disabled'}>${ic('download', 'Tout télécharger')}</button>
+            <button class="btn ghost" id="a-fav">${isFav('album:' + a.id) ? ic('heartFill', 'Favori') : ic('heart', 'Favori')}</button>
           </div>
           ${a.description ? `<div class="desc">${esc(a.description)}</div>` : ''}</div></div>
       ${a.tracks.length ? trackRows(a.tracks, { numbered: true }) : '<div class="empty">Aucune piste MP3 dans cet album.</div>'}`;
@@ -639,7 +690,7 @@ async function viewAlbum({ id, from }, seq) {
     $('#a-fav').onclick = async () => { await toggleFav('album', 'album:' + a.id, favData); render(true); };
   } catch (e) {
     if (stale(seq)) return;
-    view.innerHTML = `<button class="back" id="back">← Retour</button>${errorHtml(e)}`;
+    view.innerHTML = `<button class="back" id="back">${I.chevronLeft}<span>Retour</span></button>${errorHtml(e)}`;
     $('#back').onclick = () => go('music');
   }
 }
@@ -662,9 +713,9 @@ async function viewFilms(_p, seq) {
   const s = cache.films || (cache.films = { term: '', cat: FILM_CATS[0][0], items: null });
   view.innerHTML = `<h1>Films, séries et TV en direct</h1>
     <p class="sub">Vos sites de films, de séries et de TV en direct, ouverts dans Enora avec le bloqueur de publicités et de pop-ups, et des films classiques gratuits.</p>
-    <h2>📺 Mes sites : films, séries et TV en direct</h2>
+    <h2>Mes sites : films, séries et TV en direct</h2>
     ${sitesSectionHtml()}
-    <h2>🎬 Films classiques <span class="badge ok">GRATUITS · TÉLÉCHARGEABLES</span></h2>
+    <h2>Films classiques <span class="badge ok">GRATUITS · TÉLÉCHARGEABLES</span></h2>
     <form class="searchbar" id="sf"><input id="sq" placeholder="Titre, réalisateur, acteur…" value="${esc(s.term)}" /><button class="btn">Rechercher</button></form>
     <div class="chips">${FILM_CATS.map(([q, l]) => `<button class="chip ${s.cat === q && !s.term ? 'active' : ''}" data-c="${esc(q)}">${l}</button>`).join('')}</div>
     <div id="res">${s.items ? '' : loadingHtml()}</div>`;
@@ -688,21 +739,21 @@ async function viewFilms(_p, seq) {
 }
 
 async function viewFilm({ id, from }, seq) {
-  view.innerHTML = `<button class="back" id="back">← Retour</button>${loadingHtml()}`;
+  view.innerHTML = `<button class="back" id="back">${I.chevronLeft}<span>Retour</span></button>${loadingHtml()}`;
   $('#back').onclick = () => go(from === 'library' ? 'library' : 'films');
   try {
     const f = await iaFilm(id);
     if (stale(seq)) return;
     const t = f.track;
     const offline = t && isOffline(t);
-    view.innerHTML = `<button class="back" id="back">← Retour</button>
+    view.innerHTML = `<button class="back" id="back">${I.chevronLeft}<span>Retour</span></button>
       <div class="detail film"><div class="dc" style="background-image:url('${esc(f.cover)}')"></div>
         <div class="di"><div class="muted small">FILM</div><h1>${esc(f.title)}</h1>
           <div class="muted">${[f.year, f.creator, f.runtime].filter(Boolean).map(esc).join(' · ')}</div>
           <div class="actions">
             <button class="btn" id="f-play" ${t ? '' : 'disabled'}>▶ Regarder</button>
-            ${t ? `<button class="btn ghost" id="f-dl" ${offline ? 'disabled' : ''}>${offline ? '✓ Hors-ligne' : '⬇ Télécharger' + (t.size ? ' (' + fmtSize(t.size) + ')' : '')}</button>` : ''}
-            <button class="btn ghost" id="f-fav">${isFav('film:' + f.id) ? '♥ Favori' : '♡ Favori'}</button>
+            ${t ? `<button class="btn ghost" id="f-dl" ${offline ? 'disabled' : ''}>${offline ? ic('check', 'Hors ligne') : ic('download', 'Télécharger' + (t.size ? ' (' + fmtSize(t.size) + ')' : ''))}</button>` : ''}
+            <button class="btn ghost" id="f-fav">${isFav('film:' + f.id) ? ic('heartFill', 'Favori') : ic('heart', 'Favori')}</button>
           </div>
           ${t ? '' : '<p class="error" style="margin-top:12px">Ce film n\'a pas de version MP4 compatible.</p>'}
           ${f.description ? `<div class="desc">${esc(f.description)}</div>` : ''}</div></div>`;
@@ -715,7 +766,7 @@ async function viewFilm({ id, from }, seq) {
     $('#f-fav').onclick = async () => { await toggleFav('film', 'film:' + f.id, { id: f.id, title: f.title, year: f.year, creator: f.creator, cover: f.cover }); render(true); };
   } catch (e) {
     if (stale(seq)) return;
-    view.innerHTML = `<button class="back" id="back">← Retour</button>${errorHtml(e)}`;
+    view.innerHTML = `<button class="back" id="back">${I.chevronLeft}<span>Retour</span></button>${errorHtml(e)}`;
     $('#back').onclick = () => go('films');
   }
 }
@@ -788,13 +839,13 @@ function buildElectronYouTube() {
   ytBuilt = true;
   const c = $('#yt-container');
   c.innerHTML = `<div class="yt-bar">
-      <button class="icon-btn" id="yt-back" title="Retour">←</button>
+      <button class="icon-btn" id="yt-back" title="Retour">${I.chevronLeft}</button>
       <button class="icon-btn" id="yt-fwd" title="Suivant">→</button>
       <button class="icon-btn" id="yt-reload" title="Recharger">⟳</button>
       <div class="seg" style="margin:0"><button id="yt-site-yt">YouTube</button><button id="yt-site-ytm">YT Music</button></div>
       <form id="yt-form" style="flex:1;display:flex"><input id="yt-q" placeholder="Rechercher…" /></form>
-      <button class="pill" id="yt-audio" title="Masquer la vidéo et garder le son">🎧 Audio seul</button>
-      <span class="yt-shield">🛡 Sans pub</span>
+      <button class="pill" id="yt-audio" title="Masquer la vidéo et garder le son">Audio seul</button>
+      <span class="yt-shield">${I.shield}<span>Sans publicité</span></span>
     </div>`;
   const wv = document.createElement('webview');
   wv.setAttribute('partition', 'persist:youtube');
@@ -810,7 +861,7 @@ function buildElectronYouTube() {
     $('#yt-site-ytm').classList.toggle('active', m);
     $('#yt-q').placeholder = m ? 'Rechercher un titre, un artiste…' : 'Rechercher sur YouTube…';
     const a = getAudioOnly();
-    $('#yt-audio').textContent = a ? '🎧 Audio seul' : '🎬 Vidéo';
+    $('#yt-audio').textContent = a ? 'Audio seul' : 'Vidéo';
     $('#yt-audio').classList.toggle('on', a);
   };
   const applyAudio = () => { try { wv.executeJavaScript(audioOnlyScript(getAudioOnly())).catch(() => {}); } catch (_) {} };
@@ -820,7 +871,7 @@ function buildElectronYouTube() {
   $('#yt-reload').onclick = () => { try { wv.reload(); } catch (_) {} };
   $('#yt-site-yt').onclick = () => wv.loadURL(YT_HOME).catch(() => {});
   $('#yt-site-ytm').onclick = () => wv.loadURL(YTM_HOME).catch(() => {});
-  $('#yt-audio').onclick = () => { setAudioOnly(!getAudioOnly()); applyAudio(); syncUi(); toast(getAudioOnly() ? '🎧 Audio seul : la vidéo est masquée' : '🎬 Vidéo affichée'); };
+  $('#yt-audio').onclick = () => { setAudioOnly(!getAudioOnly()); applyAudio(); syncUi(); toast(getAudioOnly() ? 'Audio seul : la vidéo est masquée' : 'Vidéo affichée'); };
   $('#yt-form').onsubmit = (e) => {
     e.preventDefault();
     const q = $('#yt-q').value.trim();
@@ -861,8 +912,8 @@ async function viewYouTube() {
       <div class="big">▶️</div><h1>YouTube sans pub</h1>
       <p class="sub">Regardez YouTube avec le bloqueur de publicités intégré à Enora.</p>
       <form class="searchbar" id="yt-form"><input id="yt-q" placeholder="Rechercher une vidéo, un clip…" /><button class="btn">Rechercher</button></form>
-      <div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">🎬 Vidéo</button><button data-mode="audio" class="${a ? 'active' : ''}">🎧 Audio seul</button></div>
-      <button class="btn ghost" id="yt-open" style="width:100%">🛡 Ouvrir YouTube</button>
+      <div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">${ic('video', 'Vidéo')}</button><button data-mode="audio" class="${a ? 'active' : ''}">${ic('headphones', 'Audio seul')}</button></div>
+      <button class="btn ghost" id="yt-open" style="width:100%">Ouvrir YouTube</button>
       ${platform === 'web' ? '<p class="muted" style="margin-top:16px">Version web : YouTube s\'ouvre dans un nouvel onglet. Le bloqueur de publicités est disponible dans les applications Windows, Android et iPhone.</p>' : ''}
     </div>`;
   view.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { setAudioOnly(b.dataset.mode === 'audio'); render(true); }));
@@ -955,13 +1006,13 @@ function showWebPanel(url) {
     webLoaded = url;
     webBuilt = true;
     c.innerHTML = `<div class="yt-bar">
-        <button class="icon-btn" id="w-sites" title="Mes sites">☰</button>
-        <button class="icon-btn" id="w-back" title="Retour">←</button>
+        <button class="icon-btn" id="w-sites" title="Mes sites">${I.list}</button>
+        <button class="icon-btn" id="w-back" title="Retour">${I.chevronLeft}</button>
         <button class="icon-btn" id="w-fwd" title="Suivant">→</button>
         <button class="icon-btn" id="w-reload" title="Recharger">⟳</button>
         <form id="w-form" style="flex:1;display:flex"><input id="w-addr" placeholder="Adresse du site" /></form>
-        <button class="icon-btn" id="w-save" title="Ajouter à mes sites">☆</button>
-        <span class="yt-shield">🛡 Pubs et pop-ups bloquées</span>
+        <button class="icon-btn" id="w-save" title="Ajouter à mes sites">${I.star}</button>
+        <span class="yt-shield">${I.shield}<span>Publicités et pop-ups bloquées</span></span>
       </div>`;
     const wv = document.createElement('webview');
     wv.setAttribute('partition', 'persist:web');
@@ -985,7 +1036,7 @@ function showWebPanel(url) {
       if (list.some((x) => hostOf(x.url) === hostOf(u))) { toast('Déjà dans vos sites'); return; }
       list.push({ id: uid(), url: u, name: title || hostOf(u) });
       saveSites(list);
-      toast('☆ Ajouté à vos sites');
+      toast('Ajouté à vos sites');
     };
     $('#w-addr').value = url;
     const syncAddr = () => { try { if (document.activeElement !== $('#w-addr')) $('#w-addr').value = wv.getURL(); } catch (_) {} };
@@ -1008,17 +1059,17 @@ function sitesSectionHtml() {
   const sites = [...builtInSites(), ...loadSites()];
   return `
     <form class="searchbar" id="web-go"><input id="web-url" placeholder="Coller un lien : https://…" /><button class="btn">Ouvrir</button></form>
-    <button class="btn ghost" id="web-add" style="margin-bottom:16px">＋ Ajouter un site</button>
+    <button class="btn ghost" id="web-add" style="margin-bottom:16px">${ic('plus', 'Ajouter un site')}</button>
     ${sites.length ? `<div class="list">${sites.map((st) => `
       <div class="row">
-        <div class="rc"><img src="https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostOf(st.url))}" alt="" onerror="this.parentNode.textContent='🌐'"></div>
+        <div class="rc"><img src="https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostOf(st.url))}" alt="" onerror="this.remove()"></div>
         <div class="ri" data-site="${esc(st.id)}"><div class="rt ellipsis">${esc(st.name)}${st.builtIn ? '<span class="badge">SONORA</span>' : ''}</div><div class="ra ellipsis">${esc(st.url)}</div></div>
         <div class="acts">
           <button class="icon-btn" data-site-open="${esc(st.id)}" title="Ouvrir">▶</button>
-          ${st.builtIn ? '' : `<button class="icon-btn" data-site-edit="${esc(st.id)}" title="Modifier">✎</button>
-          <button class="icon-btn" data-site-del="${esc(st.id)}" title="Supprimer">🗑</button>`}
+          ${st.builtIn ? '' : `<button class="icon-btn" data-site-edit="${esc(st.id)}" title="Modifier">${I.edit}</button>
+          <button class="icon-btn" data-site-del="${esc(st.id)}" title="Supprimer">${I.trash}</button>`}
         </div>
-      </div>`).join('')}</div>` : '<div class="empty"><div class="big">🌐</div>Aucun site. Ajoutez un lien avec le bouton ＋.</div>'}
+      </div>`).join('')}</div>` : `<div class="empty"><div class="big">${I.globe}</div>Aucun site. Ajoutez un lien avec « Ajouter un site ».</div>`}
 `;
 }
 
@@ -1065,7 +1116,7 @@ async function viewWeb() {
    ========================================================================= */
 function localSettingsSnapshot() {
   // updatedAt = 0 sur un appareil où l'on n'a jamais touché aux réglages : ceux du compte s'appliquent alors.
-  return { updatedAt: settingsChangedAt(), values: { settings: getSettings(), audioOnly: getAudioOnly(), ytKey: getUserYtApiKey() } };
+  return { updatedAt: settingsChangedAt(), values: { settings: getSettings(), audioOnly: getAudioOnly(), ytKey: getUserYtApiKey(), hidden: getHidden() } };
 }
 
 cloud.init({
@@ -1092,6 +1143,7 @@ cloud.init({
         localStorage.setItem('sonora.settings', JSON.stringify(v.settings || {}));
         localStorage.setItem(YT_AUDIO_KEY, v.audioOnly ? '1' : '0');
         if (typeof v.ytKey === 'string') setYtApiKey(v.ytKey, { silent: true });
+        if (v.hidden && typeof v.hidden === 'object') localStorage.setItem(HIDDEN_KEY, JSON.stringify(v.hidden));
         localStorage.setItem(SETTINGS_TS_KEY, String(data.settings.updatedAt));
       } catch (_) {}
     }
@@ -1108,13 +1160,13 @@ cloud.onCloud((type, detail) => {
 function accountBlockHtml() {
   const fmtDate = (t) => (t ? new Date(t).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'jamais');
   if (!cloud.isConfigured()) {
-    return `<div class="set-block"><h3>👤 Compte et synchronisation</h3>
+    return `<div class="set-block"><h3>Compte et synchronisation</h3>
       <p class="muted">Bientôt : un compte Enora pour retrouver vos favoris, playlists, sites et réglages sur l'ordinateur, Android et l'iPhone.</p>
       <p class="muted small">Le compte n'est pas encore activé dans cette version.</p></div>`;
   }
   const sess = cloud.getSession();
   if (!sess) {
-    return `<div class="set-block"><h3>👤 Compte et synchronisation</h3>
+    return `<div class="set-block"><h3>Compte et synchronisation</h3>
       <p class="muted">Connectez-vous avec le même compte sur l'ordinateur, Android et l'iPhone pour retrouver partout vos favoris, playlists, sites et réglages.</p>
       <input class="set-input" id="ac-email" type="email" placeholder="Adresse e-mail" autocomplete="email" />
       <input class="set-input" id="ac-pass" type="password" placeholder="Mot de passe (6 caractères minimum)" autocomplete="current-password" />
@@ -1125,11 +1177,11 @@ function accountBlockHtml() {
       </div>
       </div>`;
   }
-  return `<div class="set-block"><h3>👤 Compte et synchronisation</h3>
+  return `<div class="set-block"><h3>Compte et synchronisation</h3>
     <p class="muted">Connecté : <b style="color:var(--text)">${esc(sess.email)}</b><br>Dernière synchronisation : ${fmtDate(cloud.lastSync())}</p>
     <p class="muted small">Synchronisés : favoris, playlists, sites de streaming et réglages. Les fichiers hors-ligne restent sur chaque appareil.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" id="ac-sync">🔄 Synchroniser maintenant</button>
+      <button class="btn" id="ac-sync">${ic('sync', 'Synchroniser maintenant')}</button>
       <button class="btn ghost" id="ac-logout">Se déconnecter</button>
     </div></div>`;
 }
@@ -1158,16 +1210,16 @@ function bindAccountBlock() {
     }
   };
   const login = $('#ac-login');
-  if (login) login.onclick = () => run(login, () => cloud.signIn(val('ac-email'), $('#ac-pass').value), '✅ Connecté : vos données sont synchronisées');
+  if (login) login.onclick = () => run(login, () => cloud.signIn(val('ac-email'), $('#ac-pass').value), 'Connecté : vos données sont synchronisées');
   const signup = $('#ac-signup');
-  if (signup) signup.onclick = () => run(signup, () => cloud.signUp(val('ac-email'), $('#ac-pass').value), '✅ Compte créé et synchronisé');
+  if (signup) signup.onclick = () => run(signup, () => cloud.signUp(val('ac-email'), $('#ac-pass').value), 'Compte créé et synchronisé');
   const reset = $('#ac-reset');
   if (reset) reset.onclick = () => {
     if (!val('ac-email')) { toast('Entrez votre adresse e-mail'); return; }
     run(reset, () => cloud.resetPassword(val('ac-email')), 'E-mail de réinitialisation envoyé');
   };
   const sync = $('#ac-sync');
-  if (sync) sync.onclick = () => run(sync, () => cloud.syncNow(), '✅ Synchronisé');
+  if (sync) sync.onclick = () => run(sync, () => cloud.syncNow(), 'Synchronisé');
   const logout = $('#ac-logout');
   if (logout) logout.onclick = async () => {
     if (!(await confirmBox('Se déconnecter ? Vos données restent sur cet appareil.', 'Se déconnecter'))) return;
@@ -1193,12 +1245,12 @@ function updateBanner() {
   }
   const u = pendingUpdate;
   bar.innerHTML = u.web
-    ? `<span>✨ Nouvelle version de Enora disponible.</span><button class="btn" id="up-go">Recharger</button><button class="icon-btn" id="up-x" title="Plus tard">✕</button>`
+    ? `<span>Une nouvelle version d'Enora est disponible.</span><button class="btn" id="up-go">Recharger</button><button class="icon-btn" id="up-x" title="Plus tard">${I.close}</button>`
     : u.ready
-    ? `<span>✨ Enora ${esc(u.version)} est prête.</span><button class="btn" id="up-go">Redémarrer et installer</button><button class="icon-btn" id="up-x" title="Plus tard">✕</button>`
+    ? `<span>Enora ${esc(u.version)} est prête.</span><button class="btn" id="up-go">Redémarrer et installer</button><button class="icon-btn" id="up-x" title="Plus tard">${I.close}</button>`
     : u.downloading
-      ? `<span>⬇ Téléchargement de Enora ${esc(u.version)}…</span><button class="icon-btn" id="up-x" title="Masquer">✕</button>`
-      : `<span>✨ Nouvelle version : Enora ${esc(u.version)}</span><button class="btn" id="up-go">Mettre à jour</button><button class="icon-btn" id="up-x" title="Plus tard">✕</button>`;
+      ? `<span>Téléchargement d'Enora ${esc(u.version)}…</span><button class="icon-btn" id="up-x" title="Masquer">${I.close}</button>`
+      : `<span>Nouvelle version : Enora ${esc(u.version)}</span><button class="btn" id="up-go">Mettre à jour</button><button class="icon-btn" id="up-x" title="Plus tard">${I.close}</button>`;
   const go = $('#up-go', bar);
   if (go) go.onclick = () => {
     if (u.ready) { window.sonora.installUpdate(); return; }
@@ -1252,7 +1304,7 @@ function updatesBlockHtml() {
     : !BUILD.repo ? 'Mises à jour : publiez Enora sur GitHub pour les activer (voir README).'
       : platform === 'electron' ? 'Les nouvelles versions publiées sur GitHub sont téléchargées et installées automatiquement (version installée).'
         : 'Enora vérifie GitHub et vous propose les nouvelles versions.';
-  return `<div class="set-block"><h3>✨ Version et mises à jour</h3>
+  return `<div class="set-block"><h3>Version et mises à jour</h3>
     <p class="muted">Enora ${esc(currentVersion())} · ${esc(where)}</p>
     ${!isStoreBuild && BUILD.repo && platform !== 'web' ? '<button class="btn ghost" id="up-check">Rechercher une mise à jour</button>' : ''}${others}</div>`;
 }
@@ -1265,10 +1317,10 @@ function bindUpdatesBlock() {
     try {
       if (platform === 'electron') {
         const r = await window.sonora.checkUpdate();
-        if (r.auto) { toast(r.version && r.version !== currentVersion() ? `Téléchargement de la version ${r.version}…` : 'Enora est à jour ✅'); return; }
+        if (r.auto) { toast(r.version && r.version !== currentVersion() ? `Téléchargement de la version ${r.version}…` : 'Enora est à jour'); return; }
       }
       const u = await checkForUpdate({ force: true });
-      if (u) { pendingUpdate = u; updateBanner(); } else toast('Enora est à jour ✅');
+      if (u) { pendingUpdate = u; updateBanner(); } else toast('Enora est à jour');
     } catch (e) { toast('Vérification impossible : ' + e.message); } finally { b.disabled = false; }
   };
 }
@@ -1286,15 +1338,15 @@ function viewSettings() {
   const st = getSettings();
   const opts = (name, list) => `<div class="opts">${list.map(([v, l, d]) => `<button class="opt ${st[name] === v ? 'active' : ''}" data-set="${name}" data-val="${v}"><b>${l}</b><span>${d}</span></button>`).join('')}</div>`;
   const used = state.media.reduce((n, m) => n + (m.size || 0), 0);
-  view.innerHTML = `${isMobile ? '<button class="back" id="back">← Bibliothèque</button>' : ''}<h1>Réglages</h1><p class="sub">Les réglages sont enregistrés sur cet appareil et synchronisés avec votre compte.</p>
+  view.innerHTML = `${isMobile ? '<button class="back" id="back">${I.chevronLeft}<span>Bibliothèque</span></button>' : ''}<h1>Réglages</h1><p class="sub">Les réglages sont enregistrés sur cet appareil et synchronisés avec votre compte.</p>
     ${accountBlockHtml()}
 
-    <div class="set-block"><h3>📺 Mes sites (Films &amp; TV)</h3>
+    <div class="set-block"><h3>Mes sites (Films &amp; TV)</h3>
       <p class="muted">Ajoutez, modifiez ou supprimez les sites qui apparaissent dans l'onglet Films &amp; TV. Ils sont synchronisés avec votre compte.</p>
       ${sitesSectionHtml()}
     </div>
 
-    <div class="set-block"><h3>🎵 Qualité audio</h3>
+    <div class="set-block"><h3>Qualité audio</h3>
       <p class="muted">Pour la musique libre. Une qualité plus haute utilise plus de données et d'espace.</p>
       <div class="set-row">Streaming</div>${opts('streamQuality', QUALITY_OPTS)}
       <div class="set-row">Téléchargements (hors-ligne)</div>${opts('downloadQuality', QUALITY_OPTS)}
@@ -1302,11 +1354,11 @@ function viewSettings() {
     </div>
 
     <div class="set-block"><h3>▶️ YouTube</h3>
-      <p class="muted">La qualité des titres YouTube est réglée automatiquement par le lecteur officiel de YouTube selon votre connexion. Vous pouvez la changer pendant la lecture avec l'icône ⚙ du lecteur, en mode vidéo.</p>
+      <p class="muted">La qualité des titres YouTube est réglée automatiquement par le lecteur officiel de YouTube selon votre connexion. Vous pouvez la changer pendant la lecture avec l'icône Réglages du lecteur, en mode vidéo.</p>
       <div class="set-row">Affichage par défaut</div>
-      ${(() => { const a = getAudioOnly(); return `<div class="opts"><button class="opt ${a ? '' : 'active'}" data-yt-audio="0"><b>🎬 Vidéo</b><span>Le clip est affiché</span></button><button class="opt ${a ? 'active' : ''}" data-yt-audio="1"><b>🎧 Audio seul</b><span>Seulement le son</span></button></div>`; })()}
+      ${(() => { const a = getAudioOnly(); return `<div class="opts"><button class="opt ${a ? '' : 'active'}" data-yt-audio="0"><b>Vidéo</b><span>Le clip est affiché</span></button><button class="opt ${a ? 'active' : ''}" data-yt-audio="1"><b>Audio seul</b><span>Seulement le son</span></button></div>`; })()}
       <div class="set-row">Source des titres</div>
-      <p class="muted">${getUserYtApiKey() ? '✅ API officielle YouTube (votre clé).' : hasBuiltInYtKey() ? '✅ API officielle YouTube.' : 'Mode sans clé.'}</p>
+      <p class="muted">${getUserYtApiKey() ? 'API officielle YouTube (votre clé).' : hasBuiltInYtKey() ? 'API officielle YouTube.' : 'Mode sans clé.'}</p>
       <details class="yt-settings" style="margin-top:8px">
         <summary>Utiliser ma propre clé API YouTube (facultatif)</summary>
         <input id="yt-key" placeholder="Collez votre clé API YouTube (AIza…)" value="${esc(getUserYtApiKey())}" />
@@ -1319,12 +1371,16 @@ function viewSettings() {
       </details>
     </div>
 
-    <div class="set-block"><h3>🎬 Films</h3>
+    <div class="set-block"><h3>Films</h3>
       <div class="set-row">Téléchargements</div>
       ${opts('filmDownload', [['light', 'Légère', 'Fichier plus petit (recommandé sur iPhone)'], ['high', 'Haute', 'Meilleure image, fichier plus gros']])}
     </div>
 
-    <div class="set-block"><h3>💾 Stockage</h3>
+    ${(() => { const n = Object.keys(getHidden()).length; return `<div class="set-block"><h3>Titres retirés</h3>
+      <p class="muted">${n ? `${n} titre(s) retiré(s) des résultats avec le bouton « − ».` : 'Aucun titre retiré. Le bouton « − » à côté d\'un titre le retire des résultats.'} Astuce : dans la recherche, ajoutez <b>-mot</b> pour exclure un mot (ex. <i>makossa -live</i>).</p>
+      ${n ? '<button class="btn ghost" id="unhide-all">Tout réafficher</button>' : ''}</div>`; })()}
+
+    <div class="set-block"><h3>Stockage</h3>
       <p class="muted">${state.media.length} élément(s) hors-ligne · ${fmtSize(used)} utilisés sur cet appareil.</p>
       <button class="btn ghost" id="set-lib">Gérer dans la Bibliothèque</button>
     </div>
@@ -1339,9 +1395,11 @@ function viewSettings() {
   if (back) back.onclick = () => go('library');
   bindAccountBlock();
   bindUpdatesBlock();
+  const ua = $('#unhide-all');
+  if (ua) ua.onclick = () => { setHidden({}); toast('Tous les titres sont réaffichés'); render(true); };
   bindSites();
   const afterKey = () => { if (cache.music?.yt) cache.music.yt.items = null; cloud.touch(); render(true); };
-  $('#yt-key-save').onclick = () => { setYtApiKey($('#yt-key').value); toast(getUserYtApiKey() ? '✅ Clé enregistrée : API officielle activée' : 'Clé vide'); afterKey(); };
+  $('#yt-key-save').onclick = () => { setYtApiKey($('#yt-key').value); toast(getUserYtApiKey() ? 'Clé enregistrée : API officielle activée' : 'Clé vide'); afterKey(); };
   $('#yt-key-del').onclick = () => { setYtApiKey(''); toast('Clé supprimée'); afterKey(); };
   view.querySelectorAll('[data-set]').forEach((b) => (b.onclick = () => {
     setSetting(b.dataset.set, b.dataset.val);
@@ -1360,11 +1418,11 @@ function viewSettings() {
 function viewAbout() {
   const repo = BUILD.repo || 'Geld237/sonora';
   view.innerHTML = `
-    <div class="about-hero"><span class="logo">♪</span>
+    <div class="about-hero"><span class="logo">${I.note}</span>
       <div><h1>Enora</h1><div class="muted">Version ${esc(currentVersion())} · Musique, films et radio, sans publicité</div></div>
     </div>
 
-    <div class="set-block about-block"><h3>💡 Pourquoi Enora ?</h3>
+    <div class="set-block about-block"><h3>Pourquoi Enora ?</h3>
       <p>Écouter de la musique et regarder des films ne devrait pas se faire au milieu des publicités, ni dépendre d'un seul appareil.
       Enora réunit en une seule application la musique récente de chaque pays et de chaque style, les films, des milliers de radios
       et vos propres fichiers, sur l'ordinateur, Android et l'iPhone.</p>
@@ -1373,7 +1431,7 @@ function viewAbout() {
     </div>
 
     <div class="about-grid">
-      <div class="set-block about-block"><h3>✨ Ce que fait l'application</h3>
+      <div class="set-block about-block"><h3>Ce que fait l'application</h3>
         <ul>
           <li>Tendances, nouveautés et styles musicaux par pays</li>
           <li>Films classiques gratuits et vos sites de streaming</li>
@@ -1383,7 +1441,7 @@ function viewAbout() {
           <li>Bloqueur de publicités et de pop-ups</li>
         </ul>
       </div>
-      <div class="set-block about-block"><h3>🛠 Comment elle est faite</h3>
+      <div class="set-block about-block"><h3>Comment elle est faite</h3>
         <ul>
           <li>Un seul code (HTML, CSS, JavaScript) pour toutes les plateformes</li>
           <li>Windows : Electron · Android et iPhone : Capacitor</li>
@@ -1394,7 +1452,7 @@ function viewAbout() {
       </div>
     </div>
 
-    <div class="set-block about-block" style="margin-top:14px"><h3>👤 Auteur</h3>
+    <div class="set-block about-block" style="margin-top:14px"><h3>Auteur</h3>
       <div class="author"><div class="av">G</div>
         <div><b style="color:var(--text)">Geld237</b><br>
           <a href="https://github.com/Geld237" target="_blank" rel="noopener">github.com/Geld237</a> ·
@@ -1402,7 +1460,7 @@ function viewAbout() {
       </div>
     </div>
 
-    <div class="set-block about-block"><h3>🙏 Sources et remerciements</h3>
+    <div class="set-block about-block"><h3>Sources et remerciements</h3>
       <p>YouTube (lecteur officiel et API YouTube Data) · Internet Archive (films et musique du domaine public) · Radio Browser (annuaire libre des radios) · Firebase (comptes).
       Enora n'est affiliée à aucun de ces services.</p>
     </div>`;
@@ -1435,7 +1493,7 @@ window.addEventListener('resize', placeYtHost);
 $('#np-video-toggle').onclick = () => {
   setAudioOnly(!getAudioOnly());
   updateNowPlaying();
-  toast(getAudioOnly() ? '🎧 Audio seul' : '🎬 Vidéo affichée');
+  toast(getAudioOnly() ? 'Audio seul' : 'Vidéo affichée');
   if (current.name === 'music') render(true);
 };
 
@@ -1481,13 +1539,13 @@ function updateNowPlaying() {
   $('#np-yt-slot').classList.toggle('hidden', !showYt);
   $('#np-cover').classList.toggle('hidden', isVideo || showYt);
   $('#np-video-toggle').classList.toggle('hidden', !isYt);
-  $('#np-video-toggle').textContent = getAudioOnly() ? '🎬' : '🎧';
+  $('#np-video-toggle').innerHTML = getAudioOnly() ? I.video : I.headphones;
   $('#np-video-toggle').title = getAudioOnly() ? 'Afficher la vidéo' : 'Audio seul';
   requestAnimationFrame(placeYtHost);
   $('#np-shuffle').classList.toggle('on', player.shuffle);
   $('#np-repeat').classList.toggle('on', player.repeat !== 'off');
-  $('#np-repeat').textContent = player.repeat === 'one' ? '🔂' : '🔁';
-  $('#np-fav').textContent = isFav(t.key) ? '♥ Favori' : '♡ Favori';
+  $('#np-repeat').innerHTML = player.repeat === 'one' ? I.repeatOne : I.repeat;
+  $('#np-fav').innerHTML = isFav(t.key) ? ic('heartFill', 'Favori') : ic('heart', 'Favori');
   $('#np-fav').classList.toggle('on', isFav(t.key));
   $('#np-addpl').classList.toggle('hidden', !!t.live);
   $('#np-queue').innerHTML = player.queue.map((q, i) => `
@@ -1500,9 +1558,9 @@ function updateNowPlaying() {
 }
 
 function updateState() {
-  const icon = player.playing ? '⏸' : '▶';
-  $('#mini-play').textContent = icon;
-  $('#np-play').textContent = icon;
+  const icon = player.playing ? I.pause : I.play;
+  $('#mini-play').innerHTML = icon;
+  $('#np-play').innerHTML = icon;
 }
 
 function updateTime() {
@@ -1576,7 +1634,7 @@ async function openYouTubeUrl(url) {
   if (isMobile) { try { await openYouTubeNative(url.replace('https://www.', 'https://m.'), { audioOnly: getAudioOnly(), adblock: !isStoreBuild }); } catch (e) { toast('Erreur : ' + e.message); } return; }
   window.open(url, '_blank');
 }
-player.addEventListener('sleep', () => { $('#np-sleep').value = '0'; toast('⏾ Minuterie terminée : lecture arrêtée'); });
+player.addEventListener('sleep', () => { $('#np-sleep').value = '0'; toast('Minuterie terminée : lecture arrêtée'); });
 
 /* Raccourcis clavier (Windows) */
 document.addEventListener('keydown', (e) => {
@@ -1597,6 +1655,8 @@ document.addEventListener('drop', (e) => {
 /* =========================================================================
    Démarrage
    ========================================================================= */
+// Icônes de la barre d'onglets et du lecteur
+document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = I[el.dataset.icon] || ''; });
 document.body.classList.add('no-mini', `platform-${platform}`);
 if (isStoreBuild) document.body.classList.add('store-build');
 startUpdateChecks();

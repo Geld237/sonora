@@ -260,22 +260,51 @@ export const getYtApiKey = () => getUserYtApiKey() || BUILD.ytKey || '';
 export const setYtApiKey = (k, { silent = false } = {}) => { try { localStorage.setItem(YT_KEY_STORE, (k || '').trim()); } catch (_) {} if (!silent) markSettingsChanged(); };
 
 /** Requête HTTP sans restriction CORS : processus principal (Windows) ou natif (iPhone). */
-async function httpRequest({ url, method = 'GET', headers = {}, body = null, timeout = 15000 }) {
+/** Erreur HTTP avec la raison donnée par Google/YouTube (quota, clé refusée…). */
+const API_REASONS = {
+  quotaExceeded: 'quota YouTube du jour atteint',
+  dailyLimitExceeded: 'quota YouTube du jour atteint',
+  rateLimitExceeded: 'trop de requêtes, réessayez dans un instant',
+  keyInvalid: 'clé API YouTube invalide',
+  API_KEY_INVALID: 'clé API YouTube invalide',
+  accessNotConfigured: 'l\'API YouTube Data v3 n\'est pas activée pour cette clé',
+  SERVICE_DISABLED: 'l\'API YouTube Data v3 n\'est pas activée pour cette clé',
+  API_KEY_HTTP_REFERRER_BLOCKED: 'clé limitée à un autre site (restriction « Sites Web »)',
+  API_KEY_SERVICE_BLOCKED: 'clé non autorisée pour l\'API YouTube',
+  forbidden: 'accès refusé par YouTube',
+};
+function httpError(status, text) {
+  let reason = '';
+  try {
+    const d = typeof text === 'string' ? JSON.parse(text) : text;
+    const e = d?.error || {};
+    reason = e.errors?.[0]?.reason || e.details?.find((x) => x.reason)?.reason || e.status || '';
+  } catch (_) {}
+  const err = new Error(API_REASONS[reason] ? `${API_REASONS[reason]} (HTTP ${status})` : `HTTP ${status}`);
+  err.status = status;
+  err.reason = reason;
+  return err;
+}
+
+/** Requête HTTP sans restriction CORS : processus principal (Windows) ou natif (Android / iPhone). */
+async function httpRequest({ url, method = 'GET', headers = {}, body = null, timeout = 15000, text = false }) {
   const cap = window.Capacitor;
   const withTimeout = (p) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('Délai dépassé')), timeout))]);
+  const payload = body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body));
   if (window.sonora?.http) {
-    const r = await withTimeout(window.sonora.http({ url, method, headers, body: body ? JSON.stringify(body) : undefined }));
-    if (r.status >= 400) throw new Error(`HTTP ${r.status}`);
-    return JSON.parse(r.text);
+    const r = await withTimeout(window.sonora.http({ url, method, headers, body: payload }));
+    if (r.status >= 400) throw httpError(r.status, r.text);
+    return text ? r.text : JSON.parse(r.text);
   }
   if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() && typeof cap.nativePromise === 'function') {
-    const r = await withTimeout(cap.nativePromise('CapacitorHttp', 'request', { url, method, headers, data: body || undefined, responseType: 'json' }));
-    if (r.status >= 400) throw new Error(`HTTP ${r.status}`);
+    const r = await withTimeout(cap.nativePromise('CapacitorHttp', 'request', { url, method, headers, data: body ?? undefined, responseType: text ? 'text' : 'json' }));
+    if (r.status >= 400) throw httpError(r.status, r.data);
+    if (text) return typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
     return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
   }
-  const res = await withTimeout(fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined }));
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const res = await withTimeout(fetch(url, { method, headers, body: payload }));
+  if (!res.ok) throw httpError(res.status, await res.text().catch(() => ''));
+  return text ? res.text() : res.json();
 }
 
 function parseIsoDuration(iso) {
@@ -348,11 +377,10 @@ async function apiSearchOnce(q, { region, recentDays = 0, order = '', category =
  *  (sans filtre de catégorie, puis sans limite de date, puis sans filtre de pays). */
 async function apiSearch(q, { region = 'FR', recent = false, recentDays = 0, order = '' } = {}, key) {
   const days = recentDays || (recent ? 30 : 0);
+  // Chaque recherche coûte 100 unités du quota gratuit (10 000 par jour) : 2 tentatives au maximum
   const attempts = [
     { region, recentDays: days, order, category: true },
-    { region, recentDays: days, order, category: false },
-    ...(days ? [{ region, recentDays: 0, order, category: false }] : []),
-    { region: 'WW', recentDays: 0, order, category: false },
+    { region, recentDays: 0, order: '', category: false },
   ];
   let best = [];
   for (const a of attempts) {
@@ -387,15 +415,54 @@ function collectVideos(node, out, seen) {
   for (const k in node) if (k !== 'videoRenderer') collectVideos(node[k], out, seen);
 }
 
-async function innertubeSearch(query, { region = 'FR', recent = false } = {}) {
+/* Paramètres actuels du site YouTube (version du client, clé interne, identifiant visiteur),
+   lus sur la page d'accueil de YouTube : ils changent régulièrement. */
+let ytConfig = null;
+let ytConfigPromise = null;
+async function loadYtConfig(force = false) {
+  if (ytConfig && !force) return ytConfig;
+  if (ytConfigPromise && !force) return ytConfigPromise;
+  ytConfigPromise = (async () => {
+    const html = await httpRequest({
+      url: 'https://www.youtube.com/?hl=fr&persist_hl=1',
+      headers: { 'Accept-Language': 'fr-FR,fr;q=0.9', Cookie: 'SOCS=CAI; CONSENT=YES+cb' },
+      text: true,
+    });
+    const pick = (name) => (html.match(new RegExp('"' + name + '"\\s*:\\s*"([^"]+)"')) || [])[1] || '';
+    ytConfig = { version: pick('INNERTUBE_CLIENT_VERSION') || '2.20261101.00.00', key: pick('INNERTUBE_API_KEY'), visitor: pick('VISITOR_DATA') };
+    try { localStorage.setItem('sonora.ytcfg', JSON.stringify({ ...ytConfig, t: Date.now() })); } catch (_) {}
+    return ytConfig;
+  })().finally(() => { ytConfigPromise = null; });
+  return ytConfigPromise;
+}
+try { const c = JSON.parse(localStorage.getItem('sonora.ytcfg')); if (c && Date.now() - c.t < 3 * 86400000) ytConfig = c; } catch (_) {}
+
+async function innertubeRequest(query, region, recent, cfg) {
+  const version = cfg?.version || '2.20261101.00.00';
   const body = {
-    context: { client: { clientName: 'WEB', clientVersion: '2.20251105.01.00', hl: 'fr', gl: !region || region === 'WW' ? 'US' : region } },
+    context: { client: { clientName: 'WEB', clientVersion: version, hl: 'fr', gl: !region || region === 'WW' ? 'US' : region, ...(cfg?.visitor ? { visitorData: cfg.visitor } : {}) } },
     query,
     params: recent ? SP_VIDEOS_MONTH : SP_VIDEOS,
   };
+  const headers = { 'Content-Type': 'application/json', 'X-Youtube-Client-Name': '1', 'X-Youtube-Client-Version': version };
+  if (!isWebApp()) { headers.Origin = 'https://www.youtube.com'; headers.Referer = 'https://www.youtube.com/'; }
+  if (cfg?.visitor) headers['X-Goog-Visitor-Id'] = cfg.visitor;
+  const url = cfg?.key ? `${INNERTUBE}&key=${encodeURIComponent(cfg.key)}` : INNERTUBE;
+  return httpRequest({ url, method: 'POST', headers, body });
+}
+
+async function innertubeSearch(query, { region = 'FR', recent = false } = {}) {
   let d;
   try {
-    d = await httpRequest({ url: INNERTUBE, method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    try {
+      d = await innertubeRequest(query, region, recent, ytConfig);
+    } catch (first) {
+      if (isWebApp()) throw first;
+      // Refus (403/400…) : on relit les paramètres actuels de YouTube puis on réessaie une fois
+      const cfg = await loadYtConfig(true).catch(() => null);
+      if (!cfg) throw first;
+      d = await innertubeRequest(query, region, recent, cfg);
+    }
   } catch (e) {
     if (isWebApp()) {
       throw new Error(getYtApiKey()
@@ -461,13 +528,20 @@ async function multiSearch(cacheId, queries, { region, recent, order = '' }) {
   const key = getYtApiKey();
   let out = [];
   let lastError = null;
-  for (const q of queries) {
+  const list = isWebApp() && key ? queries.slice(0, 2) : queries;
+  for (const q of list) {
     try {
       let l = [];
-      if (key) {
-        try { l = await apiSearch(q, { region, recent, recentDays: recent ? 60 : 0, order }, key); } catch (e) { lastError = e; }
+      const viaApi = async () => { try { return await apiSearch(q, { region, recent, recentDays: recent ? 60 : 0, order }, key); } catch (e) { lastError = e; return []; } };
+      const viaInternal = async () => { try { return await innertubeWide(q, { region, recent }); } catch (e) { lastError = e; return []; } };
+      if (isWebApp()) {
+        // Version web : seule l'API officielle est possible (navigateur)
+        l = key ? await viaApi() : await viaInternal();
+      } else {
+        // Applications : méthode gratuite d'abord (sans quota), clé officielle en secours
+        l = await viaInternal();
+        if (!l.length && key) l = await viaApi();
       }
-      if (!l.length) l = await innertubeWide(q, { region, recent });
       out = mergeTracks(out, l);
     } catch (e) { lastError = e; }
     if (out.length >= 20) break;
