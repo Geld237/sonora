@@ -179,12 +179,18 @@ export const EN = {
   'Pour jouer sans compte, la connexion « Anonyme » doit être activée dans Firebase. En attendant, connectez-vous à un compte Enora (Réglages → Compte).': 'To play without an account, “Anonymous” sign-in must be enabled in Firebase. Meanwhile, sign in to an Enora account (Settings → Account).',
   'D\'où vient le nom Enora ?': 'Where does the name Enora come from?',
   'Enora est un prénom breton. C\'est la forme bretonne d\'Honora, du latin « honor » : l\'honneur. Il a été porté par sainte Enora, au VIe siècle, épouse de saint Efflam, présente dans les récits et les chants traditionnels de Bretagne.': 'Enora is a Breton given name. It is the Breton form of Honora, from the Latin “honor”. It was borne by Saint Enora, in the 6th century, the wife of Saint Efflam, who appears in the traditional tales and songs of Brittany.',
-  'Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu\'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo reprend son initiale, un « e » dessiné comme un disque qui tourne.': 'The name was chosen for its clear, musical sound, and for what it says about the project: honouring music and the people who make it. The logo uses its initial, an “e” drawn like a spinning record.',
+  'Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu\'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo reprend son initiale, un « E » dont les trois barres ont des longueurs différentes, comme les niveaux d\'un égaliseur.': 'The name was chosen for its clear, musical sound, and for what it says about the project: honouring music and the people who make it. The logo uses its initial, an “E” whose three bars have different lengths, like the levels of an equalizer.',
   'Automatique (langue de l\'appareil)': 'Automatic (device language)', 'Dix langues. Les traductions peuvent être améliorées par tous : voir les fichiers i18n du projet.': 'Ten languages. Anyone can improve the translations: see the project\'s i18n files.',
+  // 1.8 : signalements IA
+  'Ce titre est-il créé par IA ?': 'Is this track made with AI?', 'Chargement des avis…': 'Loading votes…', 'Oui, c\'est de l\'IA': 'Yes, it is AI', 'Non, ce n\'est pas de l\'IA': 'No, it is not AI',
+  'Aucun avis pour le moment. Votez avec les flèches.': 'No votes yet. Vote with the arrows.', 'Nombre de signalements « créé par IA » par les utilisateurs d\'Enora': 'Number of “made with AI” reports by Enora users',
+  'Les votes ne sont pas encore activés (règle Firestore « aivotes » à ajouter, voir le README).': 'Voting is not enabled yet (Firestore rule “aivotes” to add, see the README).',
 };
 
 // Phrases avec une partie variable
 export const EN_PATTERNS = [
+  [/^Signalé (\d+) fois comme créé par IA · (\d+) avis contraire\(s\)( · votre vote est compté)?$/, (m, u, d, mine) => `Reported ${u} time(s) as made with AI · ${d} opposing vote(s)${mine ? ' · your vote is counted' : ''}`],
+  [/^IA · (\d+)$/, 'AI · $1'],
   [/^Partie (\w{5})$/, 'Game $1'],
   [/^(\d+) joueur\(s\)$/, '$1 player(s)'],
   [/^(\d+) pts · (\d+) joueur\(s\)$/, '$1 pts · $2 player(s)'],

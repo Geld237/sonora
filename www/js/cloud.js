@@ -175,8 +175,13 @@ async function guestToken() {
 export const anyToken = () => (isLoggedIn() ? token() : guestToken());
 
 /** Requête authentifiée vers un autre document Firestore (salons d'écoute à plusieurs, jeu en soirée). */
-export async function authFetch(path, { method = 'GET', body = null, guest = false } = {}) {
-  const s = guest ? await anyToken() : await token();
+/** Identité de l'appareil (anonyme, propre à cette installation) ; à défaut, le compte connecté. */
+export async function deviceToken() {
+  try { return await guestToken(); } catch (e) { if (isLoggedIn()) return token(); throw e; }
+}
+
+export async function authFetch(path, { method = 'GET', body = null, guest = false, device = false } = {}) {
+  const s = device ? await deviceToken() : guest ? await anyToken() : await token();
   const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(getConfig().projectId)}/databases/(default)/documents${path.startsWith(':') ? '' : '/'}${path}`;
   const res = await fetch(url, { method, headers: { Authorization: `Bearer ${s.idToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const d = await res.json().catch(() => ({}));

@@ -203,7 +203,7 @@ export function drawCloud(profile, tr = (s) => s) {
   glow(920, 140, 600, 'rgba(255,55,95,.5)'); glow(120, 1000, 560, 'rgba(94,92,230,.45)');
   x.textBaseline = 'alphabetic';
   x.fillStyle = '#ff375f'; x.beginPath(); x.roundRect(64, 56, 60, 60, 15); x.fill();
-  x.font = `800 44px ${FONT}`; x.fillStyle = '#fff'; x.fillText('e', 81, 101);
+  x.font = `800 44px ${FONT}`; x.fillStyle = '#fff'; x.fillText('E', 79, 102);
   x.font = `700 38px ${FONT}`; x.fillStyle = '#f5f5f7'; x.fillText(tr('Mon nuage musical'), 142, 86);
   x.font = `500 26px ${FONT}`; x.fillStyle = '#8e8e93'; x.fillText(profile.label, 142, 120);
   const COLORS = { mood: ['#ffffff', '#ff6482', '#ff375f'], style: ['#bf5af2', '#da8fff', '#9d8cff'], artist: ['#d1d1d6', '#aeaeb2', '#e5e5ea'], fact: ['#ff9f0a', '#ffd60a', '#64d2ff'] };

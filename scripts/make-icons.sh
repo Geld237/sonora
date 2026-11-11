@@ -4,7 +4,7 @@
 set -euo pipefail
 SRC=resources/logo.svg
 TMP=$(mktemp -d)
-GLYPH='<path d="M297 512H727A215 215 0 1 0 664 664" fill="none" stroke="#fff" stroke-width="100" stroke-linecap="round" stroke-linejoin="round"/>'
+GLYPH='<path d="M700 290H350V734H670M350 512H590" fill="none" stroke="#fff" stroke-width="100" stroke-linecap="round" stroke-linejoin="round"/>'
 png() { rsvg-convert -w "$2" -h "$2" "$1" -o "$3"; }
 flat() { convert "$1" -background '#ff375f' -alpha remove -alpha off "$1"; }
 
@@ -16,12 +16,12 @@ for f in www/icons/icon-192.png www/icons/icon-512.png www/icons/apple-touch-ico
 png $SRC 1024 ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png; flat ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
 
 # Icône « maskable » (Android, PWA) : le dessin tient dans la zone centrale
-sed 's#<path d="M297#<g transform="translate(512 512) scale(.72) translate(-512 -512)"><path d="M297#; s#stroke-linejoin="round"/>#stroke-linejoin="round"/></g>#' $SRC > $TMP/mask.svg
+sed 's#<path d="M700#<g transform="translate(512 512) scale(.72) translate(-512 -512)"><path d="M700#; s#stroke-linejoin="round"/>#stroke-linejoin="round"/></g>#' $SRC > $TMP/mask.svg
 png $TMP/mask.svg 512 www/icons/icon-maskable-512.png; flat www/icons/icon-maskable-512.png
 
 # Android : icônes classiques (coins arrondis / rondes) et premier plan de l'icône adaptative
 sed 's#<rect width="1024" height="1024" fill="url(\#g)"/>#<rect width="1024" height="1024" rx="190" fill="url(\#g)"/>#' $SRC > $TMP/square.svg
-sed 's#<rect width="1024" height="1024" fill="url(\#g)"/>#<circle cx="512" cy="512" r="512" fill="url(\#g)"/>#; s#<path d="M297#<g transform="translate(512 512) scale(.86) translate(-512 -512)"><path d="M297#; s#stroke-linejoin="round"/>#stroke-linejoin="round"/></g>#' $SRC > $TMP/round.svg
+sed 's#<rect width="1024" height="1024" fill="url(\#g)"/>#<circle cx="512" cy="512" r="512" fill="url(\#g)"/>#; s#<path d="M700#<g transform="translate(512 512) scale(.86) translate(-512 -512)"><path d="M700#; s#stroke-linejoin="round"/>#stroke-linejoin="round"/></g>#' $SRC > $TMP/round.svg
 echo "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1024 1024\"><g transform=\"translate(512 512) scale(.5) translate(-512 -512)\">$GLYPH</g></svg>" > $TMP/fg.svg
 RES=android/app/src/main/res
 for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do

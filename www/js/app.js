@@ -9,6 +9,7 @@ import { podcastSearch, podcastTop, podcastLookup, podcastFeed, getSubscriptions
 import { initRooms, createRoom, joinRoom, leaveRoom, pushState, currentRoom, onRoom } from './rooms.js';
 import { applyLanguage, tr, LANGS } from './i18n.js';
 import qrcode from './qrcode.js';
+import { canVote, knownVotes, getVotes, vote as voteAI } from './aivotes.js';
 import { newCode, cleanCode, myId, hostWrite, hostClose, hostPlayers, readParty, playerWrite, playerLeave } from './party.js';
 import { getProfile, getProfileName, setProfileName, cleanName, randomName, ensureProfileName } from './profile.js';
 import { AUDIUS_GENRES, audiusTrending, audiusSearch, audiusMood } from './audius.js';
@@ -341,7 +342,7 @@ function trackRows(tracks, { removable = false, playlistId = null, numbered = fa
     return `<div class="row ${playing ? 'playing' : ''}">${ranked ? `<span class="rank${rankStart + j < 3 ? ' top' : ''}">${rankStart + j + 1}</span>` : ''}
       <div class="rc${t.kind === 'youtube' ? ' wide' : ''}">${numbered ? `<span class="muted small">${j + 1}</span>` : `<img src="${esc(cover)}" loading="lazy" onerror="this.src='${t.kind === 'video' ? FALLBACK_VIDEO : FALLBACK_AUDIO}'">`}</div>
       <div class="ri" data-act="play" data-i="${i}">
-        <div class="rt ellipsis">${esc(t.title)}${t.live ? '<span class="badge">EN DIRECT</span>' : ''}${t.kind === 'video' ? '<span class="badge">VIDÉO</span>' : ''}${offline ? '<span class="badge ok">HORS-LIGNE</span>' : ''}${t.quality === 'Sans perte' ? '<span class="badge">SANS PERTE</span>' : ''}${t.ai ? `<span class="badge ai" title="${t.ai === 'declared' ? 'Titre déclaré comme créé avec une IA' : 'Mention d\'une IA dans le titre ou le nom de la chaîne'}">${t.ai === 'declared' ? 'IA' : 'IA ?'}</span>` : ''}</div>
+        <div class="rt ellipsis">${esc(t.title)}${t.live ? '<span class="badge">EN DIRECT</span>' : ''}${t.kind === 'video' ? '<span class="badge">VIDÉO</span>' : ''}${offline ? '<span class="badge ok">HORS-LIGNE</span>' : ''}${t.quality === 'Sans perte' ? '<span class="badge">SANS PERTE</span>' : ''}${(() => { const cv = knownVotes(t.key); return cv && cv.up > cv.down ? `<span class="badge ai" title="Nombre de signalements « créé par IA » par les utilisateurs d'Enora">IA · ${cv.up}</span>` : ''; })()}${t.ai && !(knownVotes(t.key)?.up > knownVotes(t.key)?.down) ? `<span class="badge ai" title="${t.ai === 'declared' ? 'Titre déclaré comme créé avec une IA' : 'Mention d\'une IA dans le titre ou le nom de la chaîne'}">${t.ai === 'declared' ? 'IA' : 'IA ?'}</span>` : ''}</div>
         <div class="ra ellipsis">${esc(t.sub || t.artist || '')}${t.duration ? ' · ' + fmtTime(t.duration) : ''}${meta && t.year ? ' · ' + t.year : ''}${meta && t.plays ? ` · ${fmtCount(t.plays)} écoutes` : ''}</div>
       </div>
       <div class="acts">
@@ -1317,9 +1318,33 @@ function openTrackInfo(t) {
   ].filter((r) => r[1]).map(([k, v]) => `<div class="info-row"><span>${k}</span><b${k === 'Style' || k === 'Humeur' || k === 'Album' ? ' data-notr' : ''}>${esc(v)}</b></div>`).join('');
   const c = modal(`<div class="info-head"><img src="${esc(t.cover || FALLBACK_AUDIO)}" alt="" onerror="this.src='${FALLBACK_AUDIO}'"><div><h3 data-notr>${esc(t.title)}</h3><div class="muted" data-notr>${esc(t.artist || '')}</div></div></div>
     <div id="info-rows" class="info-rows">${rows()}</div>
+    ${canVote(t) ? `<div class="ai-vote" id="ai-vote"><div class="ai-q"><b>Ce titre est-il créé par IA ?</b><span class="muted small" id="ai-status">Chargement des avis…</span></div>
+      <div class="ai-btns"><button class="vote up" id="ai-up" disabled title="Oui, c'est de l'IA">${I.arrowUp}<b>–</b></button><button class="vote down" id="ai-down" disabled title="Non, ce n'est pas de l'IA">${I.arrowDown}<b>–</b></button></div></div>` : ''}
     <p class="muted small" id="info-note">${t.kind === 'youtube' ? 'Chargement des détails…' : ''}</p>
     <div class="modal-actions">${t.link ? '<button class="btn ghost" id="info-link">Voir la page de l\'artiste</button>' : ''}<button class="btn" id="info-close">Fermer</button></div>`);
   $('#info-close', c).onclick = closeModal;
+  if (canVote(t)) {
+    const paint = (v) => {
+      const up = $('#ai-up'), down = $('#ai-down'), st = $('#ai-status');
+      if (!up) return;
+      up.disabled = down.disabled = false;
+      up.querySelector('b').textContent = v.up; down.querySelector('b').textContent = v.down;
+      up.classList.toggle('on', v.mine === 1); down.classList.toggle('on', v.mine === -1);
+      st.textContent = v.up + v.down === 0 ? 'Aucun avis pour le moment. Votez avec les flèches.'
+        : `Signalé ${v.up} fois comme créé par IA · ${v.down} avis contraire(s)${v.mine ? ' · votre vote est compté' : ''}`;
+    };
+    const fail = (e) => {
+      const st = $('#ai-status'); if (!st) return;
+      st.textContent = e.code === 'PERMISSION_DENIED' || e.status === 403 ? 'Les votes ne sont pas encore activés (règle Firestore « aivotes » à ajouter, voir le README).' : (e.message || String(e));
+    };
+    getVotes(t.key).then(paint).catch(fail);
+    const cast = (v) => async () => {
+      $('#ai-up').disabled = $('#ai-down').disabled = true;
+      try { paint(await voteAI(t.key, v)); refreshMusicList(); } catch (e) { fail(e); $('#ai-up').disabled = $('#ai-down').disabled = false; }
+    };
+    $('#ai-up', c).onclick = cast(1);
+    $('#ai-down', c).onclick = cast(-1);
+  }
   const lk = $('#info-link', c);
   if (lk) lk.onclick = () => window.open(t.link, '_blank');
   if (t.kind !== 'youtube') return;
@@ -2619,7 +2644,7 @@ function viewAbout() {
 
     <div class="set-block about-block"><h3>D'où vient le nom Enora ?</h3>
       <p>Enora est un prénom breton. C'est la forme bretonne d'Honora, du latin « honor » : l'honneur. Il a été porté par sainte Enora, au VIe siècle, épouse de saint Efflam, présente dans les récits et les chants traditionnels de Bretagne.</p>
-      <p>Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo reprend son initiale, un « e » dessiné comme un disque qui tourne.</p>
+      <p>Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo reprend son initiale, un « E » dont les trois barres ont des longueurs différentes, comme les niveaux d'un égaliseur.</p>
     </div>
 
     <div class="set-block about-block"><h3>Pourquoi Enora ?</h3>

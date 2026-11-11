@@ -654,3 +654,13 @@ body.frameless.os-win32.compact #mini .mini-inner { padding-right: 150px; }
 .g-host .g-opt.dim { opacity: .45; }
 @media (max-width: 760px) { .g-lobby-grid { grid-template-columns: 1fr; } .g-qr { margin: 0 auto; } .g-lobby .room-code { text-align: center; } .g-opts.n6 { grid-template-columns: 1fr; } .g-join { flex-wrap: wrap; } }
 .g-actions .g-start { margin: 0; }
+
+/* Signalement « créé par IA » : vote par flèches */
+.ai-vote { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--bg3); }
+.ai-q { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ai-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.vote { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 10px; border: 2px solid transparent; background: var(--bg2); color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.vote .ic { width: 18px; height: 18px; }
+.vote:disabled { opacity: .5; }
+.vote.up.on { border-color: #bf5af2; color: #bf5af2; }
+.vote.down.on { border-color: #30d158; color: #30d158; }
