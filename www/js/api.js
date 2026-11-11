@@ -329,9 +329,47 @@ function splitTitle(raw, channel) {
   return { artist, title };
 }
 
-function ytTrack({ id, title, channel, duration }) {
+/* ---------- Informations d'un titre : année, nombre d'écoutes, mention « IA » ---------- */
+/** « 1 234 567 vues », « 1,2 M de vues », « 3.4K views » -> nombre */
+function parseCount(txt) {
+  if (!txt) return 0;
+  const s = String(txt).replace(/\u00a0|\u202f/g, ' ').trim();
+  const m = s.match(/([\d.,]+)\s*(k|m|md|mrd|b)\b/i);
+  if (m) {
+    const n = parseFloat(m[1].replace(',', '.'));
+    const mult = { k: 1e3, m: 1e6, md: 1e9, mrd: 1e9, b: 1e9 }[m[2].toLowerCase()];
+    return Math.round(n * mult);
+  }
+  const digits = s.replace(/[^\d]/g, '');
+  return digits ? parseInt(digits, 10) : 0;
+}
+/** « il y a 3 ans », « 2 years ago » -> année approximative */
+function parseAgo(txt) {
+  if (!txt) return 0;
+  const m = String(txt).match(/(\d+)\s*(an|ans|year|years|mois|month|months|semaine|semaines|week|weeks|jour|jours|day|days|heure|heures|hour|hours)/i);
+  if (!m) return 0;
+  const n = +m[1];
+  const d = new Date();
+  if (/^(an|year)/i.test(m[2])) d.setFullYear(d.getFullYear() - n);
+  else if (/^(mois|month)/i.test(m[2])) d.setMonth(d.getMonth() - n);
+  else if (/^(semaine|week)/i.test(m[2])) d.setDate(d.getDate() - n * 7);
+  else if (/^(jour|day)/i.test(m[2])) d.setDate(d.getDate() - n);
+  return d.getFullYear();
+}
+/**
+ * Mention d'une création par IA dans le titre, la chaîne ou la description.
+ * YouTube ne publie pas d'indicateur fiable : c'est un indice (« IA probable »), pas une certitude.
+ */
+const AI_RE = /\b(ai|ia)[ -]?(cover|generated|music|song|version|vocals?|voice)\b|\b(cover|musique|chanson|version|voix|généré(e)?s?|created|made|generated|créé(e)?s?)\s+(par |by |with |avec )?(l'|une |an )?(ia|ai|intelligence artificielle|artificial intelligence)\b|\bpar (l'|une )?(ia|intelligence artificielle)\b|[([](ai|ia)[)\]]|\b(suno|udio)\b|contenu (modifié|synthétique)|altered or synthetic/i;
+const AI_NEG = /\b(no|not|non|sans|pas|aucune?|without|0 ?%)\b[^.·]{0,25}\b(ai|ia)\b/i;
+export const looksAI = (...texts) => { const s = texts.filter(Boolean).join(' · '); return AI_RE.test(s) && !AI_NEG.test(s); };
+
+function ytTrack({ id, title, channel, duration, views = 0, year = 0 }) {
   const t = splitTitle(title, channel);
   return {
+    ...(views ? { plays: views } : {}),
+    ...(year ? { year } : {}),
+    ...(looksAI(title, channel) ? { ai: 'probable' } : {}),
     key: `yt:${id}`,
     ytId: id,
     title: t.title,
@@ -348,19 +386,21 @@ const YT_API = 'https://www.googleapis.com/youtube/v3';
 
 async function apiVideos(ids, key) {
   if (!ids.length) return [];
-  const p = new URLSearchParams({ part: 'snippet,contentDetails,status', id: ids.join(','), maxResults: '50', key });
+  const p = new URLSearchParams({ part: 'snippet,contentDetails,status,statistics', id: ids.join(','), maxResults: '50', key });
   const d = await httpRequest({ url: `${YT_API}/videos?${p}` });
   return (d.items || []).filter((v) => v.status?.embeddable !== false).map((v) => ytTrack({
     id: v.id, title: v.snippet?.title, channel: v.snippet?.channelTitle, duration: parseIsoDuration(v.contentDetails?.duration),
+    views: +v.statistics?.viewCount || 0, year: v.snippet?.publishedAt ? new Date(v.snippet.publishedAt).getFullYear() : 0,
   }));
 }
 
 async function apiTrending(region, key) {
   if (!region || region === 'WW') return [];
-  const p = new URLSearchParams({ part: 'snippet,contentDetails,status', chart: 'mostPopular', videoCategoryId: '10', regionCode: region, maxResults: '50', hl: 'fr', key });
+  const p = new URLSearchParams({ part: 'snippet,contentDetails,status,statistics', chart: 'mostPopular', videoCategoryId: '10', regionCode: region, maxResults: '50', hl: 'fr', key });
   const d = await httpRequest({ url: `${YT_API}/videos?${p}` });
   return (d.items || []).filter((v) => v.status?.embeddable !== false).map((v) => ytTrack({
     id: v.id, title: v.snippet?.title, channel: v.snippet?.channelTitle, duration: parseIsoDuration(v.contentDetails?.duration),
+    views: +v.statistics?.viewCount || 0, year: v.snippet?.publishedAt ? new Date(v.snippet.publishedAt).getFullYear() : 0,
   }));
 }
 
@@ -410,6 +450,8 @@ function collectVideos(node, out, seen) {
         title: v.title?.runs?.map((r) => r.text).join('') || v.title?.simpleText || '',
         channel: v.ownerText?.runs?.[0]?.text || v.longBylineText?.runs?.[0]?.text || '',
         duration: parseClock(v.lengthText?.simpleText),
+        views: parseCount(v.viewCountText?.simpleText || v.viewCountText?.runs?.map((r) => r.text).join('') || v.shortViewCountText?.simpleText),
+        year: parseAgo(v.publishedTimeText?.simpleText),
       }));
     }
   }
@@ -710,6 +752,36 @@ export async function ytFindOne(q) {
   if (!l.length && key) l = await apiSearchOnce(q, { region: 'FR', category: true }, key);
   if (!l.length && isWebApp() && !key) throw new Error('Version web : ajoutez une clé API YouTube (Réglages → YouTube).');
   return l.find((t) => (t.duration || 0) < 900) || l[0] || null;
+}
+
+/** Thème (humeur, moment de la journée, activité, époque) : plusieurs formulations fusionnées. */
+export async function ytTheme(id, queries) {
+  return multiSearch(`theme.${id}`, queries, { region: 'WW', recent: false });
+}
+
+/** Détails d'un titre YouTube : date, écoutes, description (pour la fiche « Infos du titre »). */
+export async function ytDetails(id) {
+  const key = getYtApiKey();
+  const out = { plays: 0, likes: 0, date: '', category: '', description: '', channel: '' };
+  if (key) {
+    try {
+      const p = new URLSearchParams({ part: 'snippet,statistics', id, key });
+      const v = (await httpRequest({ url: `${YT_API}/videos?${p}` })).items?.[0];
+      if (v) return { plays: +v.statistics?.viewCount || 0, likes: +v.statistics?.likeCount || 0, date: v.snippet?.publishedAt || '', category: '', description: v.snippet?.description || '', channel: v.snippet?.channelTitle || '' };
+    } catch (_) {}
+  }
+  if (isWebApp()) return out;
+  const cfg = ytConfig || await loadYtConfig().catch(() => null);
+  const version = cfg?.version || '2.20250101.00.00';
+  const headers = { 'Content-Type': 'application/json', 'X-Youtube-Client-Name': '1', 'X-Youtube-Client-Version': version, Origin: 'https://www.youtube.com', Referer: 'https://www.youtube.com/' };
+  if (cfg?.visitor) headers['X-Goog-Visitor-Id'] = cfg.visitor;
+  const d = await httpRequest({
+    url: `https://www.youtube.com/youtubei/v1/player?prettyPrint=false${cfg?.key ? `&key=${encodeURIComponent(cfg.key)}` : ''}`, method: 'POST', headers,
+    body: { context: { client: { clientName: 'WEB', clientVersion: version, hl: 'fr', gl: 'FR' } }, videoId: id },
+  });
+  const vd = d.videoDetails || {};
+  const mf = d.microformat?.playerMicroformatRenderer || {};
+  return { plays: +vd.viewCount || 0, likes: +mf.likeCount || 0, date: mf.publishDate || mf.uploadDate || '', category: mf.category || '', description: vd.shortDescription || '', channel: vd.author || '' };
 }
 
 /** Recherche libre (titre, artiste…). */

@@ -12,6 +12,7 @@ const DEFAULTS = {
   lang: 'auto',              // auto | fr | en
   autoRadio: 'on',           // lecture continue : radio du dernier titre à la fin de la file d'attente
   autoLyrics: 'on',          // paroles automatiques (LRCLIB)
+  showMixes: 'off',          // compilations et mix dans les listes de musique : on | off
 };
 
 /** Économie de données active ? « auto » = réseau mobile ou mode économie du téléphone. */

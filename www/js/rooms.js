@@ -1,6 +1,7 @@
 // Écoute à plusieurs : un salon = un document Firestore « rooms/{CODE} » que l'hôte met à jour
 // (titre, position, lecture/pause) et que les invités relisent toutes les 3 secondes.
 import * as cloud from './cloud.js';
+import { getProfileName } from './profile.js';
 
 const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => ALPHA[b % ALPHA.length]).join('');
@@ -33,7 +34,7 @@ function snapshot() {
   const s = hooks.getState();
   const t = shareable(s.track) ? { ...s.track } : null;
   if (t) { delete t.mediaId; if (t.cover && t.cover.startsWith('blob:')) delete t.cover; }
-  return { v: 1, track: t, pos: Math.round((s.position || 0) * 10) / 10, playing: !!s.playing && !!t, name: (cloud.getSession()?.email || '').split('@')[0].slice(0, 20) };
+  return { v: 1, track: t, pos: Math.round((s.position || 0) * 10) / 10, playing: !!s.playing && !!t, name: getProfileName() || 'Anonyme' }; // jamais l'adresse e-mail
 }
 
 /** Crée un salon : cet appareil devient l'hôte. */

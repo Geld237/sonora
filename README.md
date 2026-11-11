@@ -21,6 +21,15 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.6.0
+- **Nouvelle source : Audius** (Musique → « Indépendants ») : des artistes indépendants qui publient eux-mêmes leur musique, en écoute complète, via l'API publique d'Audius. Si Audius demande un jour une clé, ajoutez le secret GitHub `AUDIUS_API_KEY` (gratuit).
+- **Parcourir par humeur, moment de la journée, activité ou époque**, en plus du style.
+- **Compilations et mix en option** : masqués par défaut, un bouton les réaffiche.
+- **Infos de chaque titre** : année, nombre d'écoutes, source, et mention « IA » (déclarée sur Audius ; « IA ? » sur YouTube quand une IA est citée dans le titre, la chaîne ou la description — YouTube ne publie pas d'indicateur fiable).
+- **Blind test** (onglet Jeu, à la place de l'onglet YouTube) : un extrait, quatre réponses, un chrono, des séries qui doublent les points. YouTube sans publicité reste accessible dans Réglages → Sources.
+- **Nom d'utilisateur** aléatoire ou choisi : l'adresse e-mail n'est jamais montrée aux autres.
+- **Réglages en onglets** : Compte, Apparence, Lecture, Sources, Données.
+
 ## Nouveautés 1.5.0
 - **Paroles automatiques** : affichées et synchronisées toutes seules quand elles existent ([LRCLIB](https://lrclib.net), base ouverte).
 - **Pour vous** : suggestions calculées sur l'appareil à partir de l'historique et des favoris (aucun serveur, aucune collecte).

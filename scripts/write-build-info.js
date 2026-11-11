@@ -22,6 +22,9 @@ const sites = (process.env.SONORA_SITES || '').split(/\r?\n|;/).map((l) => l.tri
 }).filter(Boolean);
 if (sites.length) info.sites = sites;
 if (ytKey) info.ytKey = ytKey;
+// Audius (facultatif) : clé gratuite si le service en demande une (secret GitHub AUDIUS_API_KEY)
+const audiusKey = (process.env.AUDIUS_API_KEY || '').trim();
+if (audiusKey) info.audiusKey = audiusKey;
 const out = `// Fichier généré par scripts/write-build-info.js — ne pas modifier à la main.
 export const BUILD = ${JSON.stringify(info)};
 `;

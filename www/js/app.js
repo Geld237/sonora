@@ -1,5 +1,5 @@
 import { db, uid } from './db.js';
-import { iaSearch, musicQuery, filmQuery, iaAlbum, iaFilm, radioSearch, ytTrending, ytNewReleases, ytSearch, ytStyle, ytCategory, ytForYou, ytRadio, ytFindOne, ytDiagnostic, getYtApiKey, getUserYtApiKey, hasBuiltInYtKey, setYtApiKey, ytMode } from './api.js';
+import { iaSearch, musicQuery, filmQuery, iaAlbum, iaFilm, radioSearch, ytTrending, ytNewReleases, ytSearch, ytStyle, ytCategory, ytForYou, ytRadio, ytFindOne, ytTheme, ytDetails, looksAI, ytDiagnostic, getYtApiKey, getUserYtApiKey, hasBuiltInYtKey, setYtApiKey, ytMode } from './api.js';
 import { ytMedia } from './youtube-player.js';
 import { getSettings, setSetting, markSettingsChanged, settingsChangedAt, SETTINGS_TS_KEY, dataSaverActive } from './settings.js';
 import { fetchLyrics } from './lyrics.js';
@@ -9,6 +9,8 @@ import { podcastSearch, podcastTop, podcastLookup, podcastFeed, getSubscriptions
 import { initRooms, createRoom, joinRoom, leaveRoom, pushState, currentRoom, onRoom } from './rooms.js';
 import { applyLanguage, tr } from './i18n.js';
 import qrcode from './qrcode.js';
+import { getProfile, getProfileName, setProfileName, cleanName, randomName, ensureProfileName } from './profile.js';
+import { AUDIUS_GENRES, audiusTrending, audiusSearch, audiusMood } from './audius.js';
 import * as cloud from './cloud.js';
 import { BUILD } from './build-info.js';
 import { I, ic } from './icons.js';
@@ -325,7 +327,7 @@ function hydrate(t) {
    ========================================================================= */
 let rowTracks = [];   // pistes affichées dans la vue courante
 
-function trackRows(tracks, { removable = false, playlistId = null, numbered = false, ranked = false, hideable = false, rankStart = 0 } = {}) {
+function trackRows(tracks, { removable = false, playlistId = null, numbered = false, ranked = false, hideable = false, rankStart = 0, meta = false } = {}) {
   const base = rowTracks.length;
   rowTracks.push(...tracks);
   if (!tracks.length) return '';
@@ -333,17 +335,18 @@ function trackRows(tracks, { removable = false, playlistId = null, numbered = fa
     const i = base + j;
     const playing = player.current && player.current.key === t.key;
     const offline = isOffline(t);
-    const canDl = !t.live && (t.origin === 'archive' || t.origin === 'podcast') && !offline;
+    const canDl = !t.live && (t.origin === 'archive' || t.origin === 'podcast' || (t.origin === 'audius' && t.downloadable)) && !offline;
     const cover = t.cover || (t.kind === 'video' ? FALLBACK_VIDEO : FALLBACK_AUDIO);
     return `<div class="row ${playing ? 'playing' : ''}">${ranked ? `<span class="rank${rankStart + j < 3 ? ' top' : ''}">${rankStart + j + 1}</span>` : ''}
       <div class="rc${t.kind === 'youtube' ? ' wide' : ''}">${numbered ? `<span class="muted small">${j + 1}</span>` : `<img src="${esc(cover)}" loading="lazy" onerror="this.src='${t.kind === 'video' ? FALLBACK_VIDEO : FALLBACK_AUDIO}'">`}</div>
       <div class="ri" data-act="play" data-i="${i}">
-        <div class="rt ellipsis">${esc(t.title)}${t.live ? '<span class="badge">EN DIRECT</span>' : ''}${t.kind === 'video' ? '<span class="badge">VIDÉO</span>' : ''}${offline ? '<span class="badge ok">HORS-LIGNE</span>' : ''}${t.quality === 'Sans perte' ? '<span class="badge">SANS PERTE</span>' : ''}</div>
-        <div class="ra ellipsis">${esc(t.sub || t.artist || '')}${t.duration ? ' · ' + fmtTime(t.duration) : ''}</div>
+        <div class="rt ellipsis">${esc(t.title)}${t.live ? '<span class="badge">EN DIRECT</span>' : ''}${t.kind === 'video' ? '<span class="badge">VIDÉO</span>' : ''}${offline ? '<span class="badge ok">HORS-LIGNE</span>' : ''}${t.quality === 'Sans perte' ? '<span class="badge">SANS PERTE</span>' : ''}${t.ai ? `<span class="badge ai" title="${t.ai === 'declared' ? 'Titre déclaré comme créé avec une IA' : 'Mention d\'une IA dans le titre ou le nom de la chaîne'}">${t.ai === 'declared' ? 'IA' : 'IA ?'}</span>` : ''}</div>
+        <div class="ra ellipsis">${esc(t.sub || t.artist || '')}${t.duration ? ' · ' + fmtTime(t.duration) : ''}${meta && t.year ? ' · ' + t.year : ''}${meta && t.plays ? ` · ${fmtCount(t.plays)} écoutes` : ''}</div>
       </div>
       <div class="acts">
         <button class="icon-btn ${isFav(t.key) ? 'on' : ''}" data-act="fav" data-i="${i}" title="Favori">${isFav(t.key) ? I.heartFill : I.heart}</button>
         ${canDl ? `<button class="icon-btn" data-act="dl" data-i="${i}" title="Télécharger pour écouter hors ligne">${I.download}</button>` : ''}
+        ${t.live ? '' : `<button class="icon-btn info-btn" data-act="info" data-i="${i}" title="Infos du titre">${I.info}</button>`}
         <button class="icon-btn" data-act="queue" data-i="${i}" title="Lire ensuite">${I.queue}</button>
         ${t.live ? '' : `<button class="icon-btn" data-act="addpl" data-i="${i}" title="Ajouter à une playlist">${I.plus}</button>`}
         ${removable && t.mediaId ? `<button class="icon-btn" data-act="del" data-i="${i}" title="Supprimer">${I.trash}</button>` : ''}
@@ -378,6 +381,7 @@ view.addEventListener('click', async (e) => {
     }
     case 'fav': await toggleFav(t.live ? 'radio' : 'track', t.key, t); render(true); break;
     case 'dl': downloadTrack(t); break;
+    case 'info': openTrackInfo(t); break;
     case 'queue': player.addToQueue(t); toast('Sera lu ensuite'); break;
     case 'addpl': addToPlaylist(t); break;
     case 'del': deleteMedia(t.mediaId); break;
@@ -561,6 +565,7 @@ let current = { name: 'library', params: {} };
 const cache = { music: null, films: null, radio: null, pod: null, feeds: null };
 
 function go(name, params = {}) {
+  if (game && name !== 'game') abortGame(); // quitter l'onglet arrête la partie
   current = { name, params };
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === (params.tab || name)));
   render();
@@ -582,7 +587,7 @@ async function render(keepScroll = false) {
   $('#yt-container').classList.toggle('hidden', !isYt);
   $('#web-container').classList.toggle('hidden', !isWebPanel);
   view.classList.toggle('hidden', isYt || isWebPanel);
-  const views = { library: viewLibrary, music: viewMusic, album: viewAlbum, films: viewFilms, film: viewFilm, radio: viewRadio, youtube: viewYouTube, playlist: viewPlaylist, podcast: viewPodcast, web: viewWeb, settings: viewSettings, about: viewAbout };
+  const views = { library: viewLibrary, music: viewMusic, album: viewAlbum, films: viewFilms, film: viewFilm, radio: viewRadio, youtube: viewYouTube, playlist: viewPlaylist, podcast: viewPodcast, game: viewGame, web: viewWeb, settings: viewSettings, about: viewAbout };
   await views[current.name](current.params, seq);
   if (stale(seq)) return;
   if (keepScroll) view.scrollTop = scroll; else view.scrollTop = 0;
@@ -719,6 +724,211 @@ async function viewPlaylist({ id }) {
 }
 
 /* =========================================================================
+   Jeu : blind test (un extrait, quatre réponses, un chrono)
+   ========================================================================= */
+const GAME_BEST = 'sonora.game.best';
+const GAME_ROUNDS = 10;
+const GAME_TIME = 15;
+let game = null;          // partie en cours
+let gamePool = 'trend';   // catégorie choisie
+const gameActive = () => !!game && (game.phase === 'load' || game.phase === 'play' || game.phase === 'reveal');
+const gameBest = () => { try { return JSON.parse(localStorage.getItem(GAME_BEST)) || {}; } catch (_) { return {}; } };
+const shuffled = (l) => { const a = l.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const gamePools = () => [['trend', 'Tendances'], ['lib', 'Ma bibliothèque'], ...MUSIC_CATEGORIES.map(([c]) => [`cat:${c}`, c]), ...THEMES.era[1].map(([n]) => [`era:${n}`, n])];
+const poolName = (id) => (gamePools().find((p) => p[0] === id) || gamePools()[0])[1];
+
+async function loadGamePool(id) {
+  let list;
+  if (id === 'lib') {
+    const favs = [...state.favs.values()].filter((f) => f.type === 'track').map((f) => f.data);
+    const pls = state.playlists.flatMap((p) => p.tracks);
+    const local = state.media.filter((m) => m.kind === 'audio').map(mediaToTrack);
+    list = [...favs, ...pls, ...local].map(hydrate);
+  } else if (id.startsWith('cat:')) list = await ytCategory(id.slice(4), subsOf(id.slice(4)));
+  else if (id.startsWith('era:')) { const th = themeOf('era', id.slice(4)); list = await ytTheme(`era.${th[0]}`, th[1]); }
+  else list = await ytTrending('WW');
+  const seen = new Set();
+  return list.filter((t) => t && !t.live && t.kind !== 'video' && t.origin !== 'podcast' && !isMix(t) && (t.duration || 200) >= 45
+    && !seen.has(fold(t.title)) && seen.add(fold(t.title)));
+}
+
+function stopGameAudio() {
+  clearInterval(game?.tick); clearTimeout(game?.wait); clearTimeout(game?.nextT);
+  try { player.el.pause(); } catch (_) {}
+  player.queue = []; player.index = -1;
+  if (player.el === ytMedia) { try { ytMedia.stop(); } catch (_) {} }
+  player.emit('change');
+}
+function abortGame() {
+  if (!game) return;
+  stopGameAudio();
+  game = null;
+  document.body.classList.remove('game-on');
+}
+
+async function startGame() {
+  game = { phase: 'load', pool: gamePool, i: 0, score: 0, streak: 0, bestStreak: 0, good: 0, played: [], skips: 0 };
+  document.body.classList.add('game-on');
+  closeNowPlaying();
+  renderGame();
+  try {
+    const pool = shuffled(await loadGamePool(gamePool));
+    if (!game) return;
+    if (pool.length < 4) throw new Error(gamePool === 'lib' ? 'Il faut au moins 4 titres dans vos favoris, playlists ou fichiers pour jouer avec votre bibliothèque.' : 'Pas assez de titres pour cette catégorie. Essayez-en une autre.');
+    game.tracks = pool;
+    game.rounds = Math.min(GAME_ROUNDS, pool.length);
+    game.cursor = 0;
+    nextRound();
+  } catch (e) {
+    const msg = e.message || String(e);
+    abortGame();
+    renderGame(msg);
+  }
+}
+
+function nextRound() {
+  if (!game) return;
+  if (game.i >= game.rounds || game.cursor >= game.tracks.length) return endGame();
+  const answer = game.tracks[game.cursor++];
+  const others = shuffled(game.tracks.filter((t) => t.key !== answer.key && fold(t.title) !== fold(answer.title))).slice(0, 3);
+  game.answer = answer;
+  game.options = shuffled([answer, ...others]);
+  game.phase = 'load';
+  game.picked = null;
+  renderGame();
+  player.shuffle = false; player.repeat = 'off';
+  player.playList([answer], 0).catch(() => {});
+  const t0 = Date.now();
+  let seeked = false;
+  clearInterval(game.tick);
+  game.tick = setInterval(() => {
+    if (!game || game.answer !== answer) return;
+    const el = player.el;
+    if (game.phase === 'load') {
+      if (game.failed || Date.now() - t0 > 9000) { // extrait indisponible : on passe au titre suivant sans compter la manche
+        game.failed = false; clearInterval(game.tick);
+        if (++game.skips > 4) { const m = 'La lecture ne démarre pas. Vérifiez votre connexion, ou jouez avec « Ma bibliothèque ».'; abortGame(); renderGame(m); return; }
+        nextRound(); return;
+      }
+      if (player.current?.key === answer.key && !el.paused && el.currentTime > 0.2) {
+        const dur = answer.duration || (isFinite(el.duration) ? el.duration : 0);
+        if (!seeked && dur > 90) { seeked = true; try { el.currentTime = Math.floor(dur * 0.35); } catch (_) {} }
+        game.phase = 'play'; game.t0 = Date.now();
+        renderGame();
+      }
+      return;
+    }
+    if (game.phase === 'play') {
+      const left = GAME_TIME - (Date.now() - game.t0) / 1000;
+      const n = $('#g-count'); if (n) n.textContent = Math.max(0, Math.ceil(left));
+      if (left <= 0) answerGame(null);
+    }
+  }, 200);
+}
+
+function answerGame(key) {
+  if (!game || game.phase !== 'play') return;
+  clearInterval(game.tick);
+  const left = Math.max(0, GAME_TIME - (Date.now() - game.t0) / 1000);
+  const ok = key === game.answer.key;
+  let gained = 0;
+  if (ok) {
+    game.streak++; game.good++;
+    const mult = game.streak >= 5 ? 3 : game.streak >= 3 ? 2 : 1;
+    gained = (100 + Math.round((left / GAME_TIME) * 100)) * mult;
+    game.score += gained;
+    game.bestStreak = Math.max(game.bestStreak, game.streak);
+  } else game.streak = 0;
+  game.picked = key; game.gained = gained; game.ok = ok;
+  game.played.push(game.answer);
+  game.phase = 'reveal';
+  game.i++;
+  renderGame();
+  game.nextT = setTimeout(nextRound, 2200);
+}
+
+function endGame() {
+  const g = game;
+  stopGameAudio();
+  g.phase = 'end';
+  document.body.classList.remove('game-on');
+  const best = gameBest();
+  g.record = g.score > (best[g.pool] || 0);
+  if (g.record) { best[g.pool] = g.score; try { localStorage.setItem(GAME_BEST, JSON.stringify(best)); } catch (_) {} }
+  renderGame();
+}
+
+function gameRank(g) {
+  const r = g.rounds ? g.good / g.rounds : 0;
+  return r >= 0.9 ? 'Oreille absolue' : r >= 0.7 ? 'Mélomane confirmé' : r >= 0.5 ? 'Bonne oreille' : r >= 0.3 ? 'En rodage' : 'Touriste du son';
+}
+
+function renderGame(error = '') {
+  if (current.name !== 'game') return;
+  const best = gameBest();
+  if (!game || error) {
+    view.innerHTML = `<div class="game">
+      <div class="g-hero"><span class="g-tag">${ic('bolt', 'Blind test')}</span><h1>Tu reconnais le son ?</h1>
+        <p class="sub">Un extrait, quatre réponses, ${GAME_TIME} secondes. Plus tu réponds vite, plus ça rapporte. Trois bonnes réponses d'affilée : points doublés. Cinq : triplés.</p></div>
+      ${error ? `<div class="error">${esc(error)}</div>` : ''}
+      <h2>Choisis ta catégorie</h2>
+      <div class="chips catchips">${gamePools().map(([id, l]) => `<button class="chip ${gamePool === id ? 'active' : ''}" data-gp="${esc(id)}">${esc(l)}${best[id] ? ` <span class="g-best">${best[id]}</span>` : ''}</button>`).join('')}</div>
+      <button class="btn g-start" id="g-start">${ic('play', 'Lancer la partie')}</button>
+      <p class="muted small">${GAME_ROUNDS} extraits par partie${best[gamePool] ? ` · ton record en ${esc(poolName(gamePool))} : ${best[gamePool]} points` : ''}</p>
+    </div>`;
+    view.querySelectorAll('[data-gp]').forEach((b) => (b.onclick = () => { gamePool = b.dataset.gp; renderGame(); }));
+    $('#g-start').onclick = startGame;
+    return;
+  }
+  const g = game;
+  if (g.phase === 'end') {
+    view.innerHTML = `<div class="game g-end">
+      <span class="g-tag">${esc(poolName(g.pool))}</span>
+      <div class="g-score">${g.score}</div><div class="muted">points</div>
+      <h1>${gameRank(g)}</h1>
+      ${g.record ? '<div class="g-record">Nouveau record</div>' : ''}
+      <div class="stats"><div class="stat"><b>${g.good}/${g.rounds}</b><span>bonnes réponses</span></div><div class="stat"><b>${g.bestStreak}</b><span>meilleure série</span></div></div>
+      <div class="g-actions"><button class="btn" id="g-again">${ic('reload', 'Rejouer')}</button><button class="btn ghost" id="g-menu">Changer de catégorie</button>
+        <button class="btn ghost" id="g-share">${ic('share', 'Partager mon score')}</button><button class="btn ghost" id="g-save">Garder les titres en playlist</button></div>
+      <h2>Les titres de la partie</h2>${(() => { rowTracks = []; return trackRows(g.played, { meta: true }); })()}
+    </div>`;
+    $('#g-again').onclick = startGame;
+    $('#g-menu').onclick = () => { game = null; renderGame(); };
+    $('#g-share').onclick = () => {
+      const text = `${getProfileName() || 'Moi'} : ${g.score} points au blind test Enora (${g.good}/${g.rounds}, ${poolName(g.pool)}). À toi de jouer : ${webAppUrl()}`;
+      if (navigator.share) navigator.share({ text }).catch(() => {}); else copyText(text, 'Score copié : collez-le où vous voulez');
+    };
+    $('#g-save').onclick = async () => {
+      const p = { id: uid(), name: `Blind test · ${poolName(g.pool)}`, tracks: g.played.map(storableTrack), createdAt: Date.now() };
+      await savePlaylist(p); state.playlists.push(p);
+      toast(`Playlist « ${p.name} » créée`);
+    };
+    return;
+  }
+  if (!g.options) { // préparation de la partie
+    view.innerHTML = `<div class="game g-round"><div class="g-stage load"><svg class="g-ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/><circle class="run" cx="60" cy="60" r="52"/></svg></div><p class="muted g-hint">Préparation de la partie…</p></div>`;
+    return;
+  }
+  const mult = g.streak >= 5 ? 3 : g.streak >= 3 ? 2 : 1;
+  const reveal = g.phase === 'reveal';
+  view.innerHTML = `<div class="game g-round">
+    <div class="g-top"><span class="g-tag">Manche ${Math.min(g.i + (reveal ? 0 : 1), g.rounds)}/${g.rounds}</span><span class="g-pts">${g.score} pts</span>${mult > 1 ? `<span class="g-combo">Série ×${mult}</span>` : ''}
+      <button class="btn ghost g-quit" id="g-quit">Quitter</button></div>
+    <div class="g-stage ${g.phase}">
+      ${reveal ? `<img class="g-cover" src="${esc(g.answer.cover || FALLBACK_AUDIO)}" alt="" onerror="this.src='${FALLBACK_AUDIO}'"><div class="g-verdict ${g.ok ? 'ok' : 'ko'}">${g.ok ? `+${g.gained}` : g.picked ? 'Raté' : 'Temps écoulé'}</div>`
+        : `<svg class="g-ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/><circle class="run" cx="60" cy="60" r="52" style="animation-duration:${GAME_TIME}s"/></svg>
+           <div class="g-count" id="g-count">${g.phase === 'play' ? GAME_TIME : ''}</div><div class="g-bars"><i></i><i></i><i></i><i></i><i></i></div>`}
+    </div>
+    <p class="muted g-hint">${g.phase === 'load' ? 'Chargement de l\'extrait…' : reveal ? '' : 'Quel est ce titre ?'}</p>
+    <div class="g-opts">${g.options.map((o) => `<button class="g-opt ${reveal ? (o.key === g.answer.key ? 'ok' : o.key === g.picked ? 'ko' : 'dim') : ''}" data-go="${esc(o.key)}" ${g.phase === 'play' ? '' : 'disabled'}><b>${esc(o.title)}</b><span>${esc(o.artist || '')}</span></button>`).join('')}</div>
+  </div>`;
+  $('#g-quit').onclick = () => { abortGame(); renderGame(); };
+  view.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => answerGame(b.dataset.go)));
+}
+
+async function viewGame() { renderGame(); }
+
+/* =========================================================================
    Partage d'une playlist (lien + QR code) et import (lien, liste de titres, CSV)
    ========================================================================= */
 const webAppUrl = () => { const [owner, name] = (BUILD.repo || 'Geld237/sonora').split('/'); return `https://${owner.toLowerCase()}.github.io/${name}/`; };
@@ -827,6 +1037,57 @@ async function importFromHash() {
 }
 
 /* =========================================================================
+   Fiche « Infos du titre » : année, écoutes, source, création par IA
+   ========================================================================= */
+const SOURCE_NAMES = { youtube: 'YouTube (lecteur officiel)', audius: 'Audius (artistes indépendants)', archive: 'Internet Archive', podcast: 'Podcast', radio: 'Radio en direct' };
+function myPlays(key) {
+  let n = 0;
+  for (const m of Object.values(statsData())) n += m.t?.[key]?.[2] || 0;
+  return n;
+}
+function openTrackInfo(t) {
+  if (!t) return;
+  const local = !!(t.mediaId || String(t.key).startsWith('local:'));
+  const info = { year: t.year || 0, date: '', plays: t.plays || 0, likes: t.likes || 0, ai: t.ai || '', category: '' };
+  const aiText = () => (info.ai === 'declared' ? 'Oui, déclaré par l\'artiste'
+    : info.ai === 'probable' ? 'Probable : une IA est mentionnée dans le titre, la chaîne ou la description'
+    : t.kind === 'youtube' ? 'Non signalé' : t.origin === 'audius' ? 'Non déclaré' : 'Inconnu');
+  const rows = () => [
+    ['Source', local ? 'Fichier de votre appareil' : SOURCE_NAMES[t.live ? 'radio' : t.origin] || SOURCE_NAMES[t.kind] || 'En ligne'],
+    [info.date ? 'Date de sortie' : 'Année', info.date ? new Date(info.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : (info.year || '')],
+    ['Écoutes', info.plays ? `${info.plays.toLocaleString('fr-FR')}` : ''],
+    ['Mentions J\'aime', info.likes ? info.likes.toLocaleString('fr-FR') : ''],
+    ['Durée', t.duration ? fmtTime(t.duration) : ''],
+    ['Style', t.genre || t.style || info.category || ''],
+    ['Humeur', t.mood || ''],
+    ['Album', t.album && t.album !== t.artist ? t.album : ''],
+    ['Vos écoutes', myPlays(t.key) ? String(myPlays(t.key)) : ''],
+    ['Créé avec une IA', aiText()],
+  ].filter((r) => r[1]).map(([k, v]) => `<div class="info-row"><span>${k}</span><b${k === 'Style' || k === 'Humeur' || k === 'Album' ? ' data-notr' : ''}>${esc(v)}</b></div>`).join('');
+  const c = modal(`<div class="info-head"><img src="${esc(t.cover || FALLBACK_AUDIO)}" alt="" onerror="this.src='${FALLBACK_AUDIO}'"><div><h3 data-notr>${esc(t.title)}</h3><div class="muted" data-notr>${esc(t.artist || '')}</div></div></div>
+    <div id="info-rows" class="info-rows">${rows()}</div>
+    <p class="muted small" id="info-note">${t.kind === 'youtube' ? 'Chargement des détails…' : ''}</p>
+    <div class="modal-actions">${t.link ? '<button class="btn ghost" id="info-link">Voir la page de l\'artiste</button>' : ''}<button class="btn" id="info-close">Fermer</button></div>`);
+  $('#info-close', c).onclick = closeModal;
+  const lk = $('#info-link', c);
+  if (lk) lk.onclick = () => window.open(t.link, '_blank');
+  if (t.kind !== 'youtube') return;
+  const note = 'Année et écoutes : chiffres publics de YouTube. YouTube ne fournit pas d\'indicateur fiable pour les titres créés par IA : Enora repère seulement les mentions écrites.';
+  ytDetails(t.ytId).then((d) => {
+    if (d.plays) info.plays = d.plays;
+    if (d.likes) info.likes = d.likes;
+    if (d.date) info.date = d.date;
+    if (d.category) info.category = d.category;
+    if (!info.ai && looksAI(d.description.slice(0, 3000), d.channel)) info.ai = 'probable';
+    if (d.plays) t.plays = d.plays;
+    if (d.date) t.year = new Date(d.date).getFullYear();
+  }).catch(() => {}).finally(() => {
+    const box = $('#info-rows');
+    if (box && !$('#modal').classList.contains('hidden')) { box.innerHTML = rows(); $('#info-note').textContent = note; }
+  });
+}
+
+/* =========================================================================
    Rétrospective : bilan d'écoute en image
    ========================================================================= */
 function openRecap(period = 'month') {
@@ -927,41 +1188,136 @@ const YT_REGIONS = [['WW', 'Monde'], ['FR', 'France'], ['CI', "Côte d'Ivoire"],
 
 
 /** Onglet Musique : YouTube (titres récents, streaming) + Musique libre (albums téléchargeables) réunis. */
+// Autres façons de parcourir : humeur, moment de la journée, activité, époque.
+// Chaque thème = [nom, recherches YouTube, humeurs Audius correspondantes]
+const Y = new Date().getFullYear();
+const THEMES = {
+  mood: ['Humeur', [
+    ['Joyeux', ['chansons bonne humeur', 'feel good songs', 'happy hits ' + Y], ['Upbeat', 'Excited', 'Easygoing']],
+    ['Calme', ['chansons calmes relaxantes', 'chill songs', 'acoustic chill songs'], ['Peaceful', 'Tender', 'Easygoing']],
+    ['Triste', ['chansons tristes', 'sad songs', 'chansons mélancoliques'], ['Melancholy', 'Sentimental', 'Yearning', 'Brooding']],
+    ['Romantique', ['chansons d\'amour', 'love songs', 'slow romantique'], ['Romantic', 'Sensual', 'Tender']],
+    ['Motivation', ['musique motivation', 'motivation songs', 'pump up songs'], ['Empowering', 'Energizing', 'Fiery', 'Defiant']],
+    ['Fête', ['musique de fête', 'party hits ' + Y, 'ambiance soirée dansante'], ['Rowdy', 'Excited', 'Energizing']],
+    ['Nostalgie', ['tubes nostalgie', 'throwback hits', 'chansons souvenirs'], ['Sentimental', 'Yearning']],
+    ['Concentration', ['musique pour se concentrer', 'focus music instrumental', 'lofi study beats'], ['Peaceful', 'Sophisticated', 'Cool']],
+    ['Colère', ['chansons énervées rap rock', 'angry songs', 'rage workout songs'], ['Aggressive', 'Fiery', 'Defiant', 'Gritty']],
+  ]],
+  moment: ['Moment', [
+    ['Réveil', ['chansons pour bien se réveiller', 'wake up songs', 'morning acoustic'], ['Easygoing', 'Peaceful', 'Upbeat']],
+    ['Matin', ['musique du matin bonne humeur', 'morning motivation songs', 'good morning hits'], ['Upbeat', 'Energizing', 'Empowering']],
+    ['Après-midi', ['hits de l\'après-midi', 'afternoon vibes songs', 'feel good afrobeats pop'], ['Cool', 'Easygoing', 'Upbeat']],
+    ['Soirée', ['musique de soirée', 'evening chill songs', 'apéro playlist chansons'], ['Sensual', 'Cool', 'Excited']],
+    ['Nuit', ['musique de nuit', 'late night songs', 'night drive songs'], ['Brooding', 'Sensual', 'Peaceful', 'Melancholy']],
+  ]],
+  activity: ['Activité', [
+    ['Sport', ['musique sport motivation', 'workout songs ' + Y, 'gym rap'], ['Energizing', 'Fiery', 'Aggressive', 'Empowering']],
+    ['Travail et révisions', ['musique pour travailler', 'study songs', 'deep focus instrumental'], ['Peaceful', 'Sophisticated', 'Cool']],
+    ['En voiture', ['chansons pour la route', 'road trip songs', 'driving hits'], ['Upbeat', 'Cool', 'Excited']],
+    ['Cuisine', ['musique pour cuisiner', 'cooking songs', 'bossa soul funk hits'], ['Easygoing', 'Upbeat', 'Sophisticated']],
+    ['Détente', ['musique détente', 'relaxing songs', 'acoustic covers'], ['Peaceful', 'Tender', 'Easygoing']],
+    ['Danse', ['chansons pour danser', 'dance hits ' + Y, 'afro dance'], ['Excited', 'Rowdy', 'Energizing']],
+    ['Sommeil', ['musique douce pour dormir', 'sleep songs calm', 'berceuse piano'], ['Peaceful', 'Tender']],
+  ]],
+  era: ['Époque', [
+    ['Années 70', ['tubes années 70', '70s hits', 'disco funk 70s'], []],
+    ['Années 80', ['tubes années 80', '80s hits', 'années 80 français'], []],
+    ['Années 90', ['tubes années 90', '90s hits', 'rap rnb 90s'], []],
+    ['Années 2000', ['tubes années 2000', '2000s hits', 'rnb 2000'], []],
+    ['Années 2010', ['tubes années 2010', '2010s hits', 'afrobeats 2010s'], []],
+    ['Années 2020', ['tubes 2020 2024', '2020s hits', 'hits ' + (Y - 1)], []],
+  ]],
+};
+const themeOf = (group, name) => (THEMES[group]?.[1] || []).find((t) => t[0] === name);
+/** Moment correspondant à l'heure qu'il est. */
+function momentNow() {
+  const h = new Date().getHours();
+  return h < 5 ? 'Nuit' : h < 9 ? 'Réveil' : h < 12 ? 'Matin' : h < 18 ? 'Après-midi' : h < 23 ? 'Soirée' : 'Nuit';
+}
+
+/* ---------- Compilations et mix : masqués par défaut, affichables en option ---------- */
+const MIX_RE = /\b(mix|megamix|mixtape|compilation|compil|best of|non[- ]?stop|medley|playlist|full album|album complet|album entier)\b|\b\d+ ?(h|heures?|hours?)\b|\btop \d{2,}\b|\bles \d{2,} meilleur/i;
+const isMix = (t) => t.kind === 'youtube' && ((t.duration || 0) > 600 || MIX_RE.test(t.title));
+const showMixes = () => getSettings().showMixes === 'on';
+
+/** « 1,2 M », « 345 k » */
+function fmtCount(n) {
+  if (!n) return '';
+  if (n >= 1e9) return (n / 1e9).toFixed(1).replace('.0', '').replace('.', ',') + ' Md';
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace('.0', '').replace('.', ',') + ' M';
+  if (n >= 1e3) return Math.round(n / 1e3) + ' k';
+  return String(n);
+}
+
 async function viewMusic(_p, seq) {
   const s = cache.music || (cache.music = {});
-  const y = s.yt || (s.yt = { mode: 'trend', region: 'WW', cat: '', genre: '', term: '', items: null, error: null });
+  const y = s.yt || (s.yt = { src: 'yt', mode: 'trend', group: 'style', cat: '', genre: '', theme: '', agenre: '', term: '', items: null, error: null });
   y.region = 'WW'; // la musique est organisée par style, plus par pays
   const a = getAudioOnly();
-  const title = { foryou: 'Pour vous', trend: 'Tendances', new: 'Nouveautés', cat: y.cat, genre: y.genre, search: `Résultats pour « ${y.term} »` }[y.mode];
+  const au = y.src === 'audius';
+  if (au && !['trend', 'theme', 'search'].includes(y.mode)) y.mode = 'trend';
+  if (au && y.mode === 'theme' && y.group === 'era') y.mode = 'trend';
+  const agName = (AUDIUS_GENRES.find((g) => g[1] === y.agenre) || AUDIUS_GENRES[0])[0];
+  const title = { foryou: 'Pour vous', trend: au ? (y.agenre ? `Tendances · ${agName}` : 'Tendances de la semaine') : 'Tendances', new: 'Nouveautés', cat: y.cat, genre: y.genre, theme: y.theme, search: `Résultats pour « ${y.term} »` }[y.mode];
   const subs = subsOf(y.cat);
+  const browsing = ['cat', 'genre', 'theme'].includes(y.mode) || (au && y.mode === 'trend');
+  const groups = au ? [['style', 'Style'], ['mood', 'Humeur'], ['moment', 'Moment'], ['activity', 'Activité']] : [['style', 'Style'], ['mood', 'Humeur'], ['moment', 'Moment'], ['activity', 'Activité'], ['era', 'Époque']];
+  const groupChips = y.group === 'style'
+    ? (au
+      ? AUDIUS_GENRES.map(([l, g]) => `<button class="chip ${y.mode === 'trend' && y.agenre === g ? 'active' : ''}" data-ag="${esc(g)}">${esc(l)}</button>`).join('')
+      : MUSIC_CATEGORIES.map(([c]) => `<button class="chip ${y.cat === c && (y.mode === 'cat' || y.mode === 'genre') ? 'active' : ''}" data-yc="${esc(c)}">${esc(c)}</button>`).join(''))
+    : THEMES[y.group][1].filter((t) => !au || t[2].length).map(([n]) => `<button class="chip ${y.mode === 'theme' && y.theme === n ? 'active' : ''}" data-yt="${esc(n)}">${esc(n)}${y.group === 'moment' && n === momentNow() ? ' <span class="now-dot" title="En ce moment"></span>' : ''}</button>`).join('');
   view.innerHTML = `<h1>Musique</h1>
-    <p class="sub">Les titres récents et populaires, par style musical, lus directement dans Enora sans publicité.</p>
+    <p class="sub">${au ? 'Des artistes indépendants du monde entier, en écoute complète et sans publicité (Audius).' : 'Les titres récents et populaires, par style, humeur ou moment de la journée, sans publicité.'}</p>
     <form class="searchbar" id="ysf">
       <input id="ysq" placeholder="Titre, artiste… (ajoutez -mot pour exclure)" value="${esc(y.raw || (y.mode === 'search' ? y.term : ''))}" />
       <button class="btn">Rechercher</button></form>
-    <div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">${ic('video', 'Vidéo')}</button><button data-mode="audio" class="${a ? 'active' : ''}">${ic('headphones', 'Audio seul')}</button></div>
-    <div class="chips catchips">
-      <button class="chip ${y.mode === 'foryou' ? 'active' : ''}" data-ym="foryou">${ic('sparkle', 'Pour vous')}</button>
-      <button class="chip ${y.mode === 'trend' ? 'active' : ''}" data-ym="trend">Tendances</button>
-      <button class="chip ${y.mode === 'new' ? 'active' : ''}" data-ym="new">Nouveautés</button>
-      ${MUSIC_CATEGORIES.map(([c]) => `<button class="chip ${y.cat === c && (y.mode === 'cat' || y.mode === 'genre') ? 'active' : ''}" data-yc="${esc(c)}">${esc(c)}</button>`).join('')}
+    <div class="music-bar">
+      <div class="seg"><button data-src="yt" class="${au ? '' : 'active'}">Clips</button><button data-src="audius" class="${au ? 'active' : ''}">Indépendants</button></div>
+      ${au ? '' : `<div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">${ic('video', 'Vidéo')}</button><button data-mode="audio" class="${a ? 'active' : ''}">${ic('headphones', 'Audio seul')}</button></div>
+      <button class="pill ${showMixes() ? 'on' : ''}" id="mix-toggle" title="Afficher ou masquer les compilations et les mix">${showMixes() ? I.check : ''}<span>Compilations et mix</span></button>`}
     </div>
-    ${subs.length && (y.mode === 'cat' || y.mode === 'genre') ? `<div class="chips subchips">
+    <div class="chips catchips">
+      ${au ? '' : `<button class="chip ${y.mode === 'foryou' ? 'active' : ''}" data-ym="foryou">${ic('sparkle', 'Pour vous')}</button>`}
+      <button class="chip ${y.mode === 'trend' && !y.agenre ? 'active' : ''}" data-ym="trend">Tendances</button>
+      ${au ? '' : `<button class="chip ${y.mode === 'new' ? 'active' : ''}" data-ym="new">Nouveautés</button>`}
+      <span class="chip-sep"></span>
+      ${groups.map(([g, l]) => `<button class="chip group ${browsing && y.group === g ? 'active' : ''}" data-grp="${g}">${l}</button>`).join('')}
+    </div>
+    ${browsing ? `<div class="chips subchips">${groupChips}</div>` : ''}
+    ${!au && subs.length && (y.mode === 'cat' || y.mode === 'genre') ? `<div class="chips subchips">
       <button class="chip ${y.mode === 'cat' ? 'active' : ''}" data-yc="${esc(y.cat)}">Tout ${esc(y.cat)}</button>
       ${subs.map((g) => `<button class="chip ${y.mode === 'genre' && y.genre === g ? 'active' : ''}" data-yg="${esc(g)}">${esc(g)}</button>`).join('')}
     </div>` : ''}
-    <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${esc(title)}
+    <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span>${esc(title)}</span>
       <button class="btn" id="yt-playall" style="font-size:14px" disabled>${ic('play', 'Tout lire')}</button><button class="btn ghost" id="yt-shuffle" style="font-size:14px" disabled>${ic('shuffle', 'Aléatoire')}</button></h2>
     <div id="res">${y.items ? '' : loadingHtml()}</div>
 `;
 
   const reload = () => { y.items = null; y.page = 0; render(true); };
+  view.querySelectorAll('[data-src]').forEach((b) => (b.onclick = () => { if (y.src === b.dataset.src) return; y.src = b.dataset.src; if (y.mode !== 'search') { y.mode = 'trend'; y.agenre = ''; } reload(); }));
   view.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => {
     if (b.dataset.mode === 'video' && dataSaverActive()) { toast('Économie de données active : audio seul (Réglages → Lecture)', 4000); return; }
     setAudioOnly(b.dataset.mode === 'audio'); updateNowPlaying(); render(true);
   }));
-  view.querySelectorAll('[data-ym]').forEach((b) => (b.onclick = () => { y.mode = b.dataset.ym; reload(); }));
-  view.querySelectorAll('[data-yc]').forEach((b) => (b.onclick = () => { y.mode = 'cat'; y.cat = b.dataset.yc; reload(); }));
+  const mt = $('#mix-toggle');
+  if (mt) mt.onclick = () => { setSetting('showMixes', showMixes() ? 'off' : 'on'); cloud.touch(); toast(showMixes() ? 'Compilations et mix affichés' : 'Compilations et mix masqués'); render(true); };
+  view.querySelectorAll('[data-ym]').forEach((b) => (b.onclick = () => { y.mode = b.dataset.ym; y.agenre = ''; reload(); }));
+  view.querySelectorAll('[data-grp]').forEach((b) => (b.onclick = () => {
+    y.group = b.dataset.grp;
+    if (y.group === 'style') {
+      if (au) { y.mode = 'trend'; if (!y.agenre) y.agenre = AUDIUS_GENRES[1][1]; }
+      else { y.mode = y.genre && subsOf(y.cat).includes(y.genre) ? 'genre' : 'cat'; if (!y.cat) y.cat = MUSIC_CATEGORIES[0][0]; }
+    } else {
+      y.mode = 'theme';
+      const list = THEMES[y.group][1].filter((t) => !au || t[2].length);
+      if (!list.some((t) => t[0] === y.theme)) y.theme = y.group === 'moment' ? momentNow() : list[0][0];
+    }
+    reload();
+  }));
+  view.querySelectorAll('[data-ag]').forEach((b) => (b.onclick = () => { y.mode = 'trend'; y.group = 'style'; y.agenre = b.dataset.ag; reload(); }));
+  view.querySelectorAll('[data-yt]').forEach((b) => (b.onclick = () => { y.mode = 'theme'; y.theme = b.dataset.yt; reload(); }));
+  view.querySelectorAll('[data-yc]').forEach((b) => (b.onclick = () => { y.mode = 'cat'; y.group = 'style'; y.cat = b.dataset.yc; reload(); }));
   view.querySelectorAll('[data-yg]').forEach((b) => (b.onclick = () => { y.mode = 'genre'; y.genre = b.dataset.yg; reload(); }));
   $('#ysf').onsubmit = (e) => {
     e.preventDefault();
@@ -972,26 +1328,35 @@ async function viewMusic(_p, seq) {
     reload();
   };
 
-  // Les deux sources sont chargées en parallèle ; chacune s'affiche dès qu'elle est prête.
-  const loadYt = y.items ? Promise.resolve(y.items) : (
-    y.mode === 'foryou' ? forYou()
+  const th = themeOf(y.group, y.theme);
+  const loadYt = y.items ? Promise.resolve(y.items) : (au
+    ? (y.mode === 'search' ? audiusSearch(y.term) : y.mode === 'theme' && th ? audiusMood(th[2], th[1][1]) : audiusTrending(y.agenre))
+    : (y.mode === 'foryou' ? forYou()
       : y.mode === 'trend' ? ytTrending(y.region)
       : y.mode === 'new' ? ytNewReleases(y.region)
       : y.mode === 'genre' ? ytStyle('WW', y.genre)
       : y.mode === 'cat' ? ytCategory(y.cat, subsOf(y.cat))
-      : ytSearch(y.term, y.region));
+      : y.mode === 'theme' && th ? ytTheme(`${y.group}.${y.theme}`, th[1])
+      : ytSearch(y.term, y.region)));
 
   const showYt = (all) => {
     const res = $('#res');
     if (!res) return;
-    const items = filterResults(all, y.exclude || []);
+    let items = filterResults(all, y.exclude || []);
+    // Compilations et mix masqués, sauf si l'option est activée ou si l'on en cherche explicitement
+    let hiddenMixes = 0;
+    if (!au && !showMixes() && !(y.mode === 'search' && MIX_RE.test(y.term))) {
+      const kept = items.filter((t) => !isMix(t));
+      hiddenMixes = items.length - kept.length;
+      if (kept.length >= 5 || !items.length) items = kept; else hiddenMixes = 0;
+    }
     refreshMusicList = () => showYt(all);
-    const styleNow = y.mode === 'genre' ? y.genre : y.mode === 'cat' ? y.cat : '';
-    if (styleNow) for (const t of all) t.style = styleNow; // sert aux suggestions et à la radio d'un titre
+    const styleNow = y.mode === 'genre' ? y.genre : y.mode === 'cat' ? y.cat : y.mode === 'theme' ? y.theme : '';
+    if (styleNow && !au) for (const t of all) t.style = styleNow; // sert aux suggestions et à la radio d'un titre
     if (!items.length) {
       res.innerHTML = y.mode === 'foryou'
         ? `<div class="empty"><div class="big">${I.sparkle}</div>Écoutez quelques titres : vos suggestions apparaîtront ici.<br>Elles sont calculées sur cet appareil, à partir de votre historique et de vos favoris.</div>`
-        : '<div class="empty">Aucun titre trouvé pour le moment. Réessayez dans quelques minutes ou choisissez un style.</div>';
+        : '<div class="empty">Aucun titre trouvé pour le moment. Réessayez dans quelques minutes ou choisissez une autre catégorie.</div>';
       return;
     }
     // Classement en pages de 20 titres, numérotées
@@ -1006,7 +1371,10 @@ async function viewMusic(_p, seq) {
         ${Array.from({ length: pages }, (_, i) => `<button class="pg ${i === y.page ? 'on' : ''}" data-pg="${i}">${i + 1}</button>`).join('')}
         <button class="pg" data-pg="${y.page + 1}" ${y.page === pages - 1 ? 'disabled' : ''} title="Page suivante">${I.chevronRight}</button>
         <span class="pg-info">${start + 1}–${start + shown.length} sur ${items.length}</span></nav>` : '';
-    res.innerHTML = trackRows(shown, { ranked: true, hideable: true, rankStart: start }) + pager;
+    res.innerHTML = trackRows(shown, { ranked: true, hideable: true, rankStart: start, meta: true }) + pager
+      + (hiddenMixes ? `<p class="muted small mix-note">${hiddenMixes} compilation(s) ou mix masqué(s). <button class="linklike" id="mix-show">Les afficher</button></p>` : '');
+    const ms = $('#mix-show');
+    if (ms) ms.onclick = () => { setSetting('showMixes', 'on'); cloud.touch(); render(true); };
     res.querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => {
       y.page = +b.dataset.pg;
       showYt(all);
@@ -1014,13 +1382,13 @@ async function viewMusic(_p, seq) {
     }));
     $('#yt-playall').disabled = false;
     $('#yt-shuffle').disabled = false;
-    $('#yt-playall').onclick = () => { player.shuffle = false; if (ytDirect(items, 0)) return; player.playList(items, 0); if (!getAudioOnly()) openNowPlaying(); };
-    $('#yt-shuffle').onclick = () => { player.shuffle = true; const r = Math.floor(Math.random() * items.length); if (ytDirect(items, r)) return; player.playList(items, r); if (!getAudioOnly()) openNowPlaying(); };
+    $('#yt-playall').onclick = () => { player.shuffle = false; if (ytDirect(items, 0)) return; player.playList(items, 0); if (!au && !getAudioOnly()) openNowPlaying(); };
+    $('#yt-shuffle').onclick = () => { player.shuffle = true; const r = Math.floor(Math.random() * items.length); if (ytDirect(items, r)) return; player.playList(items, r); if (!au && !getAudioOnly()) openNowPlaying(); };
   };
 
   await Promise.all([
     loadYt.then((items) => { if (stale(seq)) return; y.items = items; showYt(items); })
-      .catch((e) => { if (stale(seq)) return; y.items = null; const r = $('#res'); if (r) r.innerHTML = errorHtml(e); }),
+      .catch((e) => { if (stale(seq)) return; y.items = null; const r = $('#res'); if (r) r.innerHTML = au ? `<div class="error">Audius ne répond pas pour le moment. Réessayez plus tard, ou revenez aux clips.<br><span class="small">(${esc(e.message || e)})</span></div>` : errorHtml(e); }),
   ]);
 }
 
@@ -1581,7 +1949,7 @@ async function viewWeb() {
    ========================================================================= */
 function localSettingsSnapshot() {
   // updatedAt = 0 sur un appareil où l'on n'a jamais touché aux réglages : ceux du compte s'appliquent alors.
-  return { updatedAt: settingsChangedAt(), values: { settings: getSettings(), audioOnly: storedAudioOnly(), ytKey: getUserYtApiKey(), hidden: getHidden(), podcasts: getSubscriptions(), stats: statsData() } };
+  return { updatedAt: settingsChangedAt(), values: { settings: getSettings(), audioOnly: storedAudioOnly(), ytKey: getUserYtApiKey(), hidden: getHidden(), podcasts: getSubscriptions(), stats: statsData(), profile: getProfile() } };
 }
 
 cloud.init({
@@ -1610,6 +1978,7 @@ cloud.init({
         if (typeof v.ytKey === 'string') setYtApiKey(v.ytKey, { silent: true });
         if (v.hidden && typeof v.hidden === 'object') localStorage.setItem(HIDDEN_KEY, JSON.stringify(v.hidden));
         if (Array.isArray(v.podcasts)) setSubscriptions(v.podcasts);
+        if (v.profile?.name && cleanName(v.profile.name)) setProfileName(cleanName(v.profile.name), v.profile.at || 0);
         if (v.stats && typeof v.stats === 'object' && !Object.keys(statsData()).length) setStatsData(v.stats);
         applyEffects();
         localStorage.setItem(SETTINGS_TS_KEY, String(data.settings.updatedAt));
@@ -1646,12 +2015,33 @@ function accountBlockHtml() {
       </div>`;
   }
   return `<div class="set-block"><h3>Compte et synchronisation</h3>
-    <p class="muted">Connecté : <b style="color:var(--text)">${esc(sess.email)}</b><br>Dernière synchronisation : ${fmtDate(cloud.lastSync())}</p>
+    <p class="muted">Connecté : <b style="color:var(--text)" data-notr>${esc(ensureProfileName())}</b><br><span class="small">Adresse du compte (visible par vous seul) : <span data-notr>${esc(sess.email)}</span></span><br>Dernière synchronisation : ${fmtDate(cloud.lastSync())}</p>
     <p class="muted small">Synchronisés : favoris, playlists, sites de streaming et réglages. Les fichiers hors-ligne restent sur chaque appareil.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" id="ac-sync">${ic('sync', 'Synchroniser maintenant')}</button>
       <button class="btn ghost" id="ac-logout">Se déconnecter</button>
     </div></div>`;
+}
+
+function profileBlockHtml() {
+  return `<div class="set-block"><h3>Profil</h3>
+    <p class="muted">Votre nom d'utilisateur est le seul nom montré aux autres (écoute à plusieurs, partage de score). Votre adresse e-mail n'est jamais affichée. Gardez le nom tiré au hasard, ou choisissez le vôtre.</p>
+    <div class="searchbar"><input id="pf-name" maxlength="20" placeholder="Nom d'utilisateur (3 à 20 caractères)" value="${esc(getProfileName())}" autocomplete="off" />
+      <button class="btn ghost" id="pf-rand" type="button">${ic('shuffle', 'Au hasard')}</button><button class="btn" id="pf-save" type="button">Enregistrer</button></div>
+  </div>`;
+}
+function bindProfileBlock() {
+  const input = $('#pf-name');
+  if (!input) return;
+  $('#pf-rand').onclick = () => { input.value = randomName(); };
+  $('#pf-save').onclick = () => {
+    const n = cleanName(input.value);
+    if (!n || /@/.test(input.value)) { toast('Choisissez un nom de 3 à 20 caractères (lettres, chiffres), sans adresse e-mail.', 4500); return; }
+    setProfileName(n);
+    markSettingsChanged(); cloud.touch();
+    toast(`Nom d'utilisateur enregistré : ${n}`);
+    render(true);
+  };
 }
 
 function bindAccountBlock() {
@@ -1802,12 +2192,22 @@ const QUALITY_OPTS = [
   ['high', 'Très haute', 'Sans perte (FLAC) si disponible'],
 ];
 
+let settingsTab = 'account';
+const SETTINGS_TABS = [['account', 'Compte'], ['look', 'Apparence'], ['play', 'Lecture'], ['sources', 'Sources'], ['data', 'Données']];
+const SETTINGS_BLOCKS = {
+  'Compte et synchronisation': 'account', 'Profil': 'account',
+  'Apparence et langue': 'look',
+  'Lecture': 'play', 'Qualité audio': 'play', 'Égaliseur': 'play', 'Films': 'play',
+  'Musique': 'sources', 'YouTube': 'sources', 'Mes sites (Films & TV)': 'sources',
+};
 function viewSettings() {
   const st = getSettings();
   const opts = (name, list) => `<div class="opts">${list.map(([v, l, d]) => `<button class="opt ${st[name] === v ? 'active' : ''}" data-set="${name}" data-val="${v}"><b>${l}</b><span>${d}</span></button>`).join('')}</div>`;
   const used = state.media.reduce((n, m) => n + (m.size || 0), 0);
   view.innerHTML = `${isMobile ? '<button class="back" id="back">${I.chevronLeft}<span>Bibliothèque</span></button>' : ''}<h1>Réglages</h1><p class="sub">Les réglages sont enregistrés sur cet appareil et synchronisés avec votre compte.</p>
+    <div class="seg set-tabs">${SETTINGS_TABS.map(([k, l]) => `<button data-stab="${k}" class="${settingsTab === k ? 'active' : ''}">${l}</button>`).join('')}</div>
     ${accountBlockHtml()}
+    ${profileBlockHtml()}
 
     <div class="set-block"><h3>Apparence et langue</h3>
       <div class="set-row">Thème</div>
@@ -1838,6 +2238,12 @@ function viewSettings() {
       <p class="muted small" style="margin-top:12px">Les titres déjà téléchargés gardent leur qualité. Supprimez-les puis retéléchargez-les pour changer.</p>
     </div>
 
+    <div class="set-block"><h3>Musique</h3>
+      <div class="set-row">Compilations et mix</div>
+      ${opts('showMixes', [['off', 'Masqués', 'Seulement les titres à l\'unité'], ['on', 'Affichés', 'Compilations, mix et vidéos de plus de 10 minutes']])}
+      <p class="muted small" style="margin-top:12px">Sources de l'onglet Musique : les clips (lecteur officiel de YouTube) et les artistes indépendants (Audius).</p>
+    </div>
+
     <div class="set-block"><h3>YouTube</h3>
       <p class="muted">La qualité des titres YouTube est réglée automatiquement par le lecteur officiel de YouTube selon votre connexion. Vous pouvez la changer pendant la lecture avec l'icône Réglages du lecteur, en mode vidéo.</p>
       <div class="set-row">Affichage par défaut</div>
@@ -1854,6 +2260,9 @@ function viewSettings() {
           <li>« Identifiants » → « Créer des identifiants » → « Clé API », puis collez-la ici.</li>
         </ol>
       </details>
+      <div class="set-row">Navigateur YouTube</div>
+      <p class="muted small">YouTube complet, avec le bloqueur de publicités.</p>
+      <button class="btn ghost" id="open-yt">${ic('youtube', 'Ouvrir YouTube sans publicité')}</button>
       <div class="set-row">Diagnostic</div>
       <p class="muted">Si la musique en ligne ne se charge pas, lancez ce test et envoyez une capture d'écran du résultat.</p>
       <button class="btn ghost" id="yt-diag">Diagnostic YouTube</button>
@@ -1899,7 +2308,12 @@ function viewSettings() {
   const back = $('#back');
   if (back) back.onclick = () => go('library');
   bindAccountBlock();
+  bindProfileBlock();
   bindUpdatesBlock();
+  // Onglets : chaque bloc est rangé d'après son titre
+  view.querySelectorAll('.set-block').forEach((b) => { b.classList.toggle('hidden', (SETTINGS_BLOCKS[b.querySelector('h3')?.textContent.trim()] || 'data') !== settingsTab); });
+  view.querySelectorAll('[data-stab]').forEach((b) => (b.onclick = () => { settingsTab = b.dataset.stab; render(); }));
+  $('#open-yt').onclick = () => go('youtube');
   $('#bk-export').onclick = exportBackup;
   $('#bk-import').onclick = () => $('#bk-file').click();
   $('#bk-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importBackup(f); };
@@ -1956,6 +2370,7 @@ function viewAbout() {
           <li>Tendances, nouveautés, styles musicaux et suggestions « Pour vous »</li>
           <li>Paroles synchronisées, radio d'un titre et écoute à plusieurs</li>
           <li>Podcasts avec reprise de lecture</li>
+          <li>Blind test musical</li>
           <li>Films classiques gratuits et vos sites de streaming</li>
           <li>Plus de 40 000 radios du monde entier</li>
           <li>Bibliothèque hors-ligne, favoris et playlists</li>
@@ -1983,7 +2398,7 @@ function viewAbout() {
     </div>
 
     <div class="set-block about-block"><h3>Sources et remerciements</h3>
-      <p>YouTube (lecteur officiel et API YouTube Data) · Internet Archive (films et musique du domaine public) · Radio Browser (annuaire libre des radios) · LRCLIB (paroles) · annuaire de podcasts d'Apple · Firebase (comptes).
+      <p>YouTube (lecteur officiel et API YouTube Data) · Internet Archive (films et musique du domaine public) · Audius (artistes indépendants) · Radio Browser (annuaire libre des radios) · LRCLIB (paroles) · annuaire de podcasts d'Apple · Firebase (comptes).
       Enora n'est affiliée à aucun de ces services.</p>
     </div>`;
 }
@@ -2038,6 +2453,7 @@ $('#np-sleep').onchange = (e) => {
 $('#np-fav').onclick = () => { const t = player.current; if (t) toggleFav(t.live ? 'radio' : 'track', t.key, t).then(() => current.name === 'library' && render(true)); };
 $('#np-addpl').onclick = () => { const t = player.current; if (t && !t.live) addToPlaylist(t); };
 $('#np-radio').onclick = () => startRadio(player.current);
+$('#np-info').onclick = () => openTrackInfo(player.current);
 $('#np-room').onclick = openRoomModal;
 $('#np-queue').addEventListener('click', (e) => { const r = e.target.closest('[data-q]'); if (r) player.jump(+r.dataset.q); });
 
@@ -2073,6 +2489,7 @@ function updateNowPlaying() {
   $('#np-fav').classList.toggle('on', isFav(t.key));
   $('#np-addpl').classList.toggle('hidden', !!t.live);
   $('#np-radio').classList.toggle('hidden', !!t.live || t.origin === 'podcast' || t.kind === 'video');
+  $('#np-info').classList.toggle('hidden', !!t.live);
   $('#np-queue').innerHTML = player.queue.map((q, i) => `
     <div class="row ${i === player.index ? 'playing' : ''}" data-q="${i}" style="cursor:pointer">
       <div class="rc"><img src="${esc(q.cover || FALLBACK_AUDIO)}" onerror="this.src='${FALLBACK_AUDIO}'"></div>
@@ -2111,6 +2528,7 @@ function renderLyrics() {
   if (!t) { box.classList.add('hidden'); lyricsState = { key: null, timed: false, lines: [], active: -1 }; return; }
   // 1. Paroles ajoutées par l'utilisateur (fichier .lrc)
   if (m && m.lyrics) { if (lyricsState.key !== `m:${m.id}`) setLyrics(`m:${m.id}`, m.lyrics); return; }
+  if (gameActive()) { box.classList.add('hidden'); return; }
   if (lyricsState.key === t.key) return; // déjà affichées ou recherche en cours
   box.classList.add('hidden');
   lyricsState = { key: t.key, timed: false, lines: [], active: -1 };
@@ -2181,7 +2599,7 @@ player.addEventListener('change', () => {
   roomPush();
   clearTimeout(listenTimer);
   const t = player.current;
-  if (t) listenTimer = setTimeout(() => { if (player.current?.key === t.key) addToHistory(t); }, 15000);
+  if (t && !gameActive()) listenTimer = setTimeout(() => { if (player.current?.key === t.key && !gameActive()) addToHistory(t); }, 15000);
   updateNowPlaying();
   // Met à jour la piste surlignée sans recharger la page
   view.querySelectorAll('.row').forEach((r) => {
@@ -2203,7 +2621,7 @@ player.addEventListener('time', () => { updateTime(); if (lyricsState.timed) syn
 // Lecture continue : à la fin de la file d'attente, on enchaîne sur une radio du dernier titre
 player.addEventListener('queueend', () => {
   const t = player.current;
-  if (getSettings().autoRadio !== 'on' || !t || t.kind !== 'youtube' || navigator.onLine === false || (currentRoom() && !currentRoom().host)) return;
+  if (gameActive() || getSettings().autoRadio !== 'on' || !t || t.kind !== 'youtube' || navigator.onLine === false || (currentRoom() && !currentRoom().host)) return;
   startRadio(t, { auto: true });
 });
 
@@ -2229,7 +2647,7 @@ function savePodcastPosition() {
 /* ---------- Écoute à plusieurs ---------- */
 let roomPushTimer = null;
 function roomPush() {
-  if (!currentRoom()?.host) return;
+  if (!currentRoom()?.host || gameActive()) return;
   clearTimeout(roomPushTimer);
   roomPushTimer = setTimeout(() => pushState(true), 350);
 }
@@ -2317,6 +2735,7 @@ function ytDirect(tracks, start) {
   return true;
 }
 player.addEventListener('error', () => {
+  if (gameActive()) { game.failed = true; return; } // blind test : on passe simplement à un autre extrait
   const t = player.current;
   if (t?.kind === 'youtube') {
     const code = ytMedia.lastError;
