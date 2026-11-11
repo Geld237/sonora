@@ -21,19 +21,19 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
-## Nouveautés 1.8.1
+## Nouveautés 1.8.2
 - **Logo définitif** : une note de musique dont la tête est un « e », d'après le croquis de l'auteur.
 
 ## Nouveautés 1.8.0
 - **Signalement des titres créés par IA** : dans la fiche « Infos du titre », chacun vote avec la flèche haute (c'est de l'IA) ou la flèche basse (ce n'en est pas). Le nombre de signalements est affiché, et rappelé dans les listes (« IA · 12 »). **Un vote par appareil et par titre, sans compte** : il faut la connexion « Anonyme » de Firebase et la règle `aivotes` ci-dessous.
-- **Logo** : un « E » avec sa barre verticale et trois barres de longueurs différentes, comme un égaliseur.
+- **Logo** : un « e » qui devient une note de musique (tête de note, hampe et deux crochets de double croche).
 
 ## Nouveautés 1.7.0
 - **Blind test en soirée** : l'appareil de l'hôte diffuse la musique et affiche un **QR code** ; chacun répond sur son téléphone (version web, sans installation). Classement en direct, **équipes** (2 à 4) ou chacun pour soi.
 - **Réglages du jeu** : nombre d'extraits, temps par extrait, nombre de réponses, titre ou artiste à deviner.
 - **Nuage de mots** (Bibliothèque → Historique → « Mon nuage musical ») : l'humeur musicale déduite, sur l'appareil, des styles écoutés, de leur rythme, des heures et du temps d'écoute. Image à enregistrer ou partager.
 - **Dix langues** : français, anglais, espagnol, allemand, portugais, chinois, arabe (affichage de droite à gauche), hindi, bengali, russe. Les traductions se corrigent dans `scripts/i18n-core.py` (puis `python3 scripts/i18n-core.py`) et `www/js/i18n-en.js`.
-- **Nouveau logo** : un « E » aux barres de longueurs différentes, comme un égaliseur (`resources/logo.svg`, icônes régénérées par `scripts/make-icons.sh`).
+- **Nouveau logo** : `resources/logo.svg` ; toutes les icônes se régénèrent avec `python3 scripts/make-icons.py`.
 - **Une seule barre sur ordinateur** : les onglets servent de barre de titre (Windows et Mac).
 - **Infos** : l'origine du nom Enora.
 

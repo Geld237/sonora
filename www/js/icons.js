@@ -52,8 +52,8 @@ export const I = {
   sliders: svg('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
   game: svg('<path d="M7.500 8h9a4.500 4.500 0 014.4 5.400l-.5 2.600a2.600 2.600 0 01-4.600 1.100L14.500 15.500h-5L8.200 17.100a2.600 2.600 0 01-4.600-1.100l-.5-2.600A4.500 4.500 0 017.500 8z"/><path d="M8 11v3M6.500 12.500h3M15.500 11.500v.2M17.500 13.500v.2"/>'),
   bolt: svg('<path d="M13 3L5 13.500h6l-1 7.500 8-10.500h-6z"/>'),
-  // Logo d'Enora : une note de musique dont la tête est un « e », avec une hampe et deux barres qui rappellent le « E »
-  logo: `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.900 15.500h7a3.500 3.500 0 1 0-1.030 2.480M12.900 15.500V5.200h5.900M12.900 9.400h4.500"/></svg>`,
+  // Logo d'Enora : un « e » qui devient une note (tête de note, hampe et deux crochets de double croche)
+  logo: `<svg class="ic" viewBox="0 0 1024 1024" fill="none" stroke="currentColor" stroke-width="84" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(-16 -6)"><path d="M262 650H586A162 162 0 1 0 538 765"/><path d="M586 650V214"/><path d="M586 214C630 268 704 290 752 336C788 370 794 414 776 456"/><path d="M586 376C628 418 690 440 730 478C756 504 762 536 750 566"/></g></svg>`,
   arrowUp: svg('<path d="M12 19V5M6 11l6-6 6 6"/>'),
   arrowDown: svg('<path d="M12 5v14M6 13l6 6 6-6"/>'),
   cloud: svg('<path d="M7 18.500a4.500 4.500 0 01-.6-8.960 5.500 5.500 0 0110.700 1.060A3.950 3.950 0 0117 18.500z"/>'),

@@ -1,10 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- Logo d'Enora : une note de musique dont la tête est un « e », avec une hampe et deux barres qui rappellent le « E ». Fond plein (les systèmes arrondissent eux-mêmes les coins). -->
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ff5c7a"/><stop offset=".55" stop-color="#ff375f"/><stop offset="1" stop-color="#c2255c"/>
-    </linearGradient>
-  </defs>
-  <rect width="1024" height="1024" fill="url(#g)"/>
-  <path d="M250 660H550A150 150 0 1 0 506 766M550 660V220H800M550 400H740" fill="none" stroke="#fff" stroke-width="84" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
+  <!-- Logo d'Enora (généré par scripts/make-icons.py) -->
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5c7a"/><stop offset=".55" stop-color="#ff375f"/><stop offset="1" stop-color="#c2255c"/></linearGradient></defs><rect width="1024" height="1024" fill="url(#g)"/><g transform="translate(-16 -6)" fill="none" stroke="#fff" stroke-width="80" stroke-linecap="round" stroke-linejoin="round">
+<path d="M262 650H586A162 162 0 1 0 538 765"/>
+<path d="M586 650V214"/>
+<path d="M586 214C630 268 704 290 752 336C788 370 794 414 776 456"/>
+<path d="M586 376C628 418 690 440 730 478C756 504 762 536 750 566"/>
+</g></svg>

@@ -72,6 +72,17 @@ export function tastes() {
   return { artists: top(a, 6), styles: top(g, 3) };
 }
 
+const LOGO_PATHS = ['M262 650H586A162 162 0 1 0 538 765', 'M586 650V214', 'M586 214C630 268 704 290 752 336C788 370 794 414 776 456', 'M586 376C628 418 690 440 730 478C756 504 762 536 750 566'];
+/** Dessine le logo d'Enora (carré rose arrondi + « e » en note de musique). */
+function drawLogo(x, px, py, size) {
+  x.save();
+  x.fillStyle = '#ff375f'; x.beginPath(); x.roundRect(px, py, size, size, size * 0.24); x.fill();
+  x.translate(px, py); x.scale(size / 1024, size / 1024); x.translate(-16, -6);
+  x.strokeStyle = '#fff'; x.lineWidth = 84; x.lineCap = 'round'; x.lineJoin = 'round';
+  for (const d of LOGO_PATHS) x.stroke(new Path2D(d));
+  x.restore();
+}
+
 /** Dessine le bilan (image 1080 × 1350, format portrait à partager). */
 export function drawRecap(r, tr = (s) => s) {
   const W = 1080, H = 1350;
@@ -87,8 +98,7 @@ export function drawRecap(r, tr = (s) => s) {
   const txt = (s, px, py, size, weight = 600, col = '#f5f5f7', max = W - 160) => { x.font = `${weight} ${size}px ${FONT}`; x.fillStyle = col; x.fillText(fit(s, max), px, py); };
   x.textBaseline = 'alphabetic';
   // En-tête
-  x.fillStyle = '#ff375f'; x.beginPath(); x.roundRect(80, 80, 72, 72, 18); x.fill();
-  txt('E', 99, 134, 52, 800, '#fff');
+  drawLogo(x, 80, 80, 72);
   txt('Enora', 172, 132, 44, 700);
   txt(tr('Ma rétrospective'), 80, 250, 76, 800);
   txt(r.label, 80, 306, 36, 500, '#8e8e93');
@@ -202,8 +212,7 @@ export function drawCloud(profile, tr = (s) => s) {
   const glow = (cx, cy, rad, col) => { const g = x.createRadialGradient(cx, cy, 0, cx, cy, rad); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, W, H); };
   glow(920, 140, 600, 'rgba(255,55,95,.5)'); glow(120, 1000, 560, 'rgba(94,92,230,.45)');
   x.textBaseline = 'alphabetic';
-  x.fillStyle = '#ff375f'; x.beginPath(); x.roundRect(64, 56, 60, 60, 15); x.fill();
-  x.font = `800 44px ${FONT}`; x.fillStyle = '#fff'; x.fillText('E', 79, 102);
+  drawLogo(x, 64, 56, 60);
   x.font = `700 38px ${FONT}`; x.fillStyle = '#f5f5f7'; x.fillText(tr('Mon nuage musical'), 142, 86);
   x.font = `500 26px ${FONT}`; x.fillStyle = '#8e8e93'; x.fillText(profile.label, 142, 120);
   const COLORS = { mood: ['#ffffff', '#ff6482', '#ff375f'], style: ['#bf5af2', '#da8fff', '#9d8cff'], artist: ['#d1d1d6', '#aeaeb2', '#e5e5ea'], fact: ['#ff9f0a', '#ffd60a', '#64d2ff'] };
