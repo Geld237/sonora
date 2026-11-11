@@ -69,6 +69,7 @@ const AD_FILTERS = [
   '*://*.galaksion.com/*',
 ];
 
+const adblockLists = require('./adblock-lists.js');
 let blockedCount = 0;
 function installAdblock(ses) {
   ses.webRequest.onBeforeRequest({ urls: AD_FILTERS }, (details, callback) => {
@@ -207,6 +208,7 @@ ipcMain.handle('sonora:update-check', async () => {
   if (!canAutoUpdate()) return { auto: false };
   try { const r = await autoUpdater.checkForUpdates(); return { auto: true, version: r?.updateInfo?.version || '' }; } catch (e) { return { auto: true, error: e.message }; }
 });
+ipcMain.handle('sonora:adblock-info', () => adblockLists.info(blockedCount));
 ipcMain.handle('sonora:app-info', () => ({ version: app.getVersion(), autoUpdate: canAutoUpdate() }));
 
 app.whenReady().then(() => {
@@ -295,6 +297,8 @@ app.whenReady().then(() => {
     installAdblock(ses);
     ses.setPermissionRequestHandler((_wc, permission, callback) => callback(['fullscreen', 'clipboard-sanitized-write'].includes(permission))); // pas de caméra/micro
   }
+  // Bloqueur renforcé : listes EasyList / uBlock Origin, chargées en arrière-plan (le blocage intégré reste actif en attendant)
+  adblockLists.enable([yt, web], AD_FILTERS).catch(() => {});
 
   createWindow();
   registerMediaKeys();

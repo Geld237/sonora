@@ -21,6 +21,11 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.9.0
+- **Bloqueur de publicités renforcé (ordinateur)** : moteur open source de Ghostery (`@ghostery/adblocker-electron`) avec les listes **EasyList**, **Peter Lowe** et **uBlock Origin** (dont les filtres YouTube). Les listes sont téléchargées au lancement, gardées sur l'appareil et renouvelées tous les 4 jours ; sans connexion, la liste intégrée continue de bloquer. Code : `electron/adblock-lists.js`.
+- **Android** : le bloqueur charge aussi les domaines publicitaires de ces listes (`FilterLists.java`), en plus de la liste intégrée.
+- **Version web** : un site ne peut pas bloquer les publicités d'un autre site ; Enora y indique le bon bloqueur à installer selon l'appareil.
+
 ## Nouveautés 1.8.2
 - **Logo définitif** : une note de musique dont la tête est un « e », d'après le croquis de l'auteur.
 

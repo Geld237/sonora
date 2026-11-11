@@ -37,7 +37,7 @@ import java.util.Locale;
 
 /**
  * Navigateur plein écran avec bloqueur de publicités :
- *  1. blocage réseau des serveurs publicitaires (shouldInterceptRequest)
+ *  1. blocage réseau des serveurs publicitaires (shouldInterceptRequest) : liste intégrée + listes EasyList / uBlock Origin
  *  2. script anti-pub injecté au début de chaque page (nettoyage des données, masquage, saut des pubs vidéo)
  *  3. blocage des pop-ups et des redirections vers des applis/stores
  */
@@ -102,6 +102,7 @@ public class AdblockWebActivity extends Activity {
             if (l.isEmpty() || l.startsWith("#")) continue;
             if (l.contains("/")) blockedPaths.add(l); else blockedHosts.add(l);
         }
+        if (adblock) FilterLists.ensureLoaded(this); // listes EasyList / uBlock Origin, en arrière-plan
         adblockScript = readAsset("sonora-adblock.js");
         audioOnlyScript = readAsset("sonora-audio-only.js");
 
@@ -222,6 +223,7 @@ public class AdblockWebActivity extends Activity {
         for (String h : blockedHosts) {
             if (host.equals(h) || host.endsWith("." + h)) return true;
         }
+        if (FilterLists.matches(host)) return true;
         String full = (host + uri.getEncodedPath()).toLowerCase(Locale.ROOT);
         for (String p : blockedPaths) {
             if (full.contains(p)) return true;

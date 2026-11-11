@@ -12,6 +12,7 @@ if (process.isMainFrame) {
     frameless: process.platform === 'win32' || process.platform === 'darwin', // la barre d'onglets sert de barre de titre
     setTheme: (light) => ipcRenderer.invoke('sonora:theme', !!light),
     // Mini-lecteur flottant et touches multimédia du clavier
+    adblockInfo: () => ipcRenderer.invoke('sonora:adblock-info'),
     setMini: (on) => ipcRenderer.invoke('sonora:mini', !!on),
     onMedia: (fn) => ipcRenderer.on('sonora:media', (_e, action) => fn(action)),
     // Mises à jour automatiques

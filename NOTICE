@@ -7,3 +7,6 @@ Composants tiers :
 - qrcode-generator de Kazuhiko Arase (www/js/qrcode.js) : licence MIT. « QR Code » est une marque déposée de DENSO WAVE INCORPORATED.
 
 Services ouverts utilisés : Audius (musique d'artistes indépendants), LRCLIB (paroles), annuaire de podcasts d'Apple et flux RSS des émissions, Radio Browser, Internet Archive.
+- @ghostery/adblocker-electron de Ghostery (moteur du bloqueur de publicités sur ordinateur) : licence MPL-2.0.
+
+Listes de filtres téléchargées par l'application, non distribuées avec elle : EasyList (GPLv3 / CC BY-SA 3.0), liste de Peter Lowe, filtres d'uBlock Origin (GPLv3).

@@ -185,10 +185,22 @@ export const EN = {
   'Ce titre est-il créé par IA ?': 'Is this track made with AI?', 'Chargement des avis…': 'Loading votes…', 'Oui, c\'est de l\'IA': 'Yes, it is AI', 'Non, ce n\'est pas de l\'IA': 'No, it is not AI',
   'Aucun avis pour le moment. Votez avec les flèches.': 'No votes yet. Vote with the arrows.', 'Nombre de signalements « créé par IA » par les utilisateurs d\'Enora': 'Number of “made with AI” reports by Enora users',
   'Les votes ne sont pas encore activés (règle Firestore « aivotes » à ajouter, voir le README).': 'Voting is not enabled yet (Firestore rule “aivotes” to add, see the README).',
+  // 1.9 : bloqueur renforcé
+  'Bloqueur de publicités': 'Ad blocker', 'Publicités des clips': 'Ads on videos',
+  'Dans un navigateur, Enora ne peut pas retirer les publicités de YouTube. La source « Indépendants » n\'en a aucune.': 'In a browser, Enora cannot remove YouTube ads. The “Independent” source has none.',
+  'Un site web n\'a pas le droit de bloquer les publicités d\'un autre site : dans cette version web, celles de YouTube et des sites de films ne peuvent pas être retirées par Enora.': 'A website is not allowed to block another site\'s ads: in this web version, Enora cannot remove ads from YouTube and movie sites.',
+  'Actif dans l\'application pour YouTube et vos sites de films : serveurs publicitaires bloqués, emplacements masqués, pop-ups refusées. Il s\'appuie sur les listes de filtres EasyList et uBlock Origin, mises à jour automatiquement.': 'Active in the app for YouTube and your movie sites: ad servers blocked, ad slots hidden, pop-ups refused. It relies on the EasyList and uBlock Origin filter lists, updated automatically.',
+  'Actif dans l\'application pour YouTube et vos sites de films : serveurs publicitaires bloqués, emplacements masqués, pop-ups refusées.': 'Active in the app for YouTube and your movie sites: ad servers blocked, ad slots hidden, pop-ups refused.',
+  'Sur iPhone : installez': 'On iPhone: install', '(gratuit), activez-le dans Réglages → Apps → Safari → Extensions, puis ouvrez Enora dans Safari.': '(free), turn it on in Settings → Apps → Safari → Extensions, then open Enora in Safari.',
+  'Sur Android : installez': 'On Android: install', 'Sur ordinateur : installez': 'On a computer: install', 'l\'application Enora': 'the Enora app',
+  '(bloqueur intégré), ou ouvrez ce site dans Firefox avec l\'extension uBlock Origin.': '(built-in blocker), or open this site in Firefox with the uBlock Origin extension.',
+  '(bloqueur intégré), ou ajoutez l\'extension uBlock Origin à votre navigateur.': '(built-in blocker), or add the uBlock Origin extension to your browser.',
 };
 
 // Phrases avec une partie variable
 export const EN_PATTERNS = [
+  [/^Listes de filtres à jour du (.*) · (\d+) publicité\(s\) bloquée\(s\) depuis le lancement$/, 'Filter lists updated on $1 · $2 ad(s) blocked since launch'],
+  [/^Liste intégrée active \(les listes complètes se chargent à la prochaine connexion\) · (\d+) publicité\(s\) bloquée\(s\) depuis le lancement$/, 'Built-in list active (full lists load at the next connection) · $1 ad(s) blocked since launch'],
   [/^Signalé (\d+) fois comme créé par IA · (\d+) avis contraire\(s\)( · votre vote est compté)?$/, (m, u, d, mine) => `Reported ${u} time(s) as made with AI · ${d} opposing vote(s)${mine ? ' · your vote is counted' : ''}`],
   [/^IA · (\d+)$/, 'AI · $1'],
   [/^Partie (\w{5})$/, 'Game $1'],

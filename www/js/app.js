@@ -1558,6 +1558,7 @@ async function viewMusic(_p, seq) {
       ${au ? '' : `<div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">${ic('video', 'Vidéo')}</button><button data-mode="audio" class="${a ? 'active' : ''}">${ic('headphones', 'Audio seul')}</button></div>
       <button class="pill ${showMixes() ? 'on' : ''}" id="mix-toggle" title="Afficher ou masquer les compilations et les mix">${showMixes() ? I.check : ''}<span>Compilations et mix</span></button>`}
     </div>
+    ${platform === 'web' && !au && !localStorage.getItem(AD_TIP_KEY) ? `<div class="ad-tip"><div><b>Publicités des clips</b><p class="muted small">Dans un navigateur, Enora ne peut pas retirer les publicités de YouTube. La source « Indépendants » n'en a aucune.</p>${webAdTipHtml()}</div><button class="icon-btn" id="ad-tip-close" title="Fermer">${I.close || '×'}</button></div>` : ''}
     <div class="chips catchips">
       ${au ? '' : `<button class="chip ${y.mode === 'foryou' ? 'active' : ''}" data-ym="foryou">${ic('sparkle', 'Pour vous')}</button>`}
       <button class="chip ${y.mode === 'trend' && !y.agenre ? 'active' : ''}" data-ym="trend">Tendances</button>
@@ -1581,6 +1582,8 @@ async function viewMusic(_p, seq) {
     if (b.dataset.mode === 'video' && dataSaverActive()) { toast('Économie de données active : audio seul (Réglages → Lecture)', 4000); return; }
     setAudioOnly(b.dataset.mode === 'audio'); updateNowPlaying(); render(true);
   }));
+  const atc = $('#ad-tip-close');
+  if (atc) atc.onclick = () => { try { localStorage.setItem(AD_TIP_KEY, '1'); } catch (_) {} atc.parentElement.remove(); };
   const mt = $('#mix-toggle');
   if (mt) mt.onclick = () => { setSetting('showMixes', showMixes() ? 'off' : 'on'); cloud.touch(); toast(showMixes() ? 'Compilations et mix affichés' : 'Compilations et mix masqués'); render(true); };
   view.querySelectorAll('[data-ym]').forEach((b) => (b.onclick = () => { y.mode = b.dataset.ym; y.agenre = ''; reload(); }));
@@ -2473,13 +2476,23 @@ const QUALITY_OPTS = [
   ['high', 'Très haute', 'Sans perte (FLAC) si disponible'],
 ];
 
+/** Version web : le bon bloqueur à installer selon l'appareil (Enora ne peut pas bloquer elle-même dans un navigateur). */
+function webAdTipHtml() {
+  const ua = navigator.userAgent;
+  const repo = `https://github.com/${BUILD.repo || 'Geld237/sonora'}/releases/latest`;
+  if (/iPhone|iPad|iPod/.test(ua)) return `<p>Sur iPhone : installez <a href="https://apps.apple.com/app/ublock-origin-lite/id6745342698" target="_blank" rel="noopener">uBlock Origin Lite</a> (gratuit), activez-le dans Réglages → Apps → Safari → Extensions, puis ouvrez Enora dans Safari.</p>`;
+  if (/Android/.test(ua)) return `<p>Sur Android : installez <a href="${repo}" target="_blank" rel="noopener">l'application Enora</a> (bloqueur intégré), ou ouvrez ce site dans Firefox avec l'extension uBlock Origin.</p>`;
+  return `<p>Sur ordinateur : installez <a href="${repo}" target="_blank" rel="noopener">l'application Enora</a> (bloqueur intégré), ou ajoutez l'extension uBlock Origin à votre navigateur.</p>`;
+}
+const AD_TIP_KEY = 'sonora.adtip.closed';
+
 let settingsTab = 'account';
 const SETTINGS_TABS = [['account', 'Compte'], ['look', 'Apparence'], ['play', 'Lecture'], ['sources', 'Sources'], ['data', 'Données']];
 const SETTINGS_BLOCKS = {
   'Compte et synchronisation': 'account', 'Profil': 'account',
   'Apparence et langue': 'look',
   'Lecture': 'play', 'Qualité audio': 'play', 'Égaliseur': 'play', 'Films': 'play',
-  'Musique': 'sources', 'YouTube': 'sources', 'Mes sites (Films & TV)': 'sources',
+  'Musique': 'sources', 'Bloqueur de publicités': 'sources', 'YouTube': 'sources', 'Mes sites (Films & TV)': 'sources',
 };
 function viewSettings() {
   const st = getSettings();
@@ -2527,6 +2540,13 @@ function viewSettings() {
       <div class="set-row">Compilations et mix</div>
       ${opts('showMixes', [['off', 'Masqués', 'Seulement les titres à l\'unité'], ['on', 'Affichés', 'Compilations, mix et vidéos de plus de 10 minutes']])}
       <p class="muted small" style="margin-top:12px">Sources de l'onglet Musique : les clips (lecteur officiel de YouTube) et les artistes indépendants (Audius).</p>
+    </div>
+
+    <div class="set-block"><h3>Bloqueur de publicités</h3>
+      ${platform === 'web'
+        ? `<p class="muted">Un site web n'a pas le droit de bloquer les publicités d'un autre site : dans cette version web, celles de YouTube et des sites de films ne peuvent pas être retirées par Enora.</p>${webAdTipHtml()}`
+        : `<p class="muted">Actif dans l'application pour YouTube et vos sites de films : serveurs publicitaires bloqués, emplacements masqués, pop-ups refusées.${platform === 'ios' ? '' : ' Il s\'appuie sur les listes de filtres EasyList et uBlock Origin, mises à jour automatiquement.'}</p>
+           <p class="muted small" id="adblock-status"></p>`}
     </div>
 
     <div class="set-block"><h3>YouTube</h3>
@@ -2599,6 +2619,13 @@ function viewSettings() {
   view.querySelectorAll('.set-block').forEach((b) => { b.classList.toggle('hidden', (SETTINGS_BLOCKS[b.querySelector('h3')?.textContent.trim()] || 'data') !== settingsTab); });
   view.querySelectorAll('[data-stab]').forEach((b) => (b.onclick = () => { settingsTab = b.dataset.stab; render(); }));
   $('#open-yt').onclick = () => go('youtube');
+  window.sonora?.adblockInfo?.().then((i) => {
+    const el = $('#adblock-status');
+    if (!el || !i) return;
+    el.textContent = i.engine === 'listes'
+      ? `Listes de filtres à jour du ${new Date(i.updatedAt).toLocaleDateString('fr-FR')} · ${i.blocked} publicité(s) bloquée(s) depuis le lancement`
+      : `Liste intégrée active (les listes complètes se chargent à la prochaine connexion) · ${i.blocked} publicité(s) bloquée(s) depuis le lancement`;
+  }).catch(() => {});
   $('#set-lang').onchange = (e) => { setSetting('lang', e.target.value); cloud.touch(); applyEffects(); render(true); };
   $('#bk-export').onclick = exportBackup;
   $('#bk-import').onclick = () => $('#bk-file').click();

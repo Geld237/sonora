@@ -1,7 +1,7 @@
 {
   "name": "sonora",
   "productName": "Enora",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "Enora — musique, films, radio et YouTube sans publicité, en ligne et hors-ligne (Windows + iPhone)",
   "main": "electron/main.js",
   "author": "Geld237",
@@ -22,6 +22,7 @@
     "@capacitor/android": "^8.6.0",
     "@capacitor/core": "^8.6.0",
     "@capacitor/ios": "^8.6.0",
+    "@ghostery/adblocker-electron": "^2.20.3",
     "capacitor-youtube-adblock": "file:plugins/youtube-adblock",
     "electron-updater": "^6.8.11"
   },
