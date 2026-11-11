@@ -238,7 +238,7 @@ export const DICT = {
   "Curieux": "Любопытный",
   "D'où vient le nom Enora ?": "Откуда имя Enora?",
   "Enora est un prénom breton. C'est la forme bretonne d'Honora, du latin « honor » : l'honneur. Il a été porté par sainte Enora, au VIe siècle, épouse de saint Efflam, présente dans les récits et les chants traditionnels de Bretagne.": "Enora — бретонское имя, бретонская форма имени Honora, от латинского «honor» — честь. Его носила святая Энора (VI век), жена святого Эффлама, героиня преданий и народных песен Бретани.",
-  "Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo reprend son initiale, un « E » dont les trois barres ont des longueurs différentes, comme les niveaux d'un égaliseur.": "Имя выбрано за ясное, музыкальное звучание и за смысл, близкий проекту: воздать честь музыке и тем, кто её создаёт. Логотип — его первая буква «E», три черты которой разной длины, как уровни эквалайзера.",
+  "Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo est une note de musique dont la tête dessine un « e », l'initiale d'Enora.": "Имя выбрано за ясное, музыкальное звучание и за смысл, близкий проекту: воздать честь музыке и тем, кто её создаёт. Логотип — нота, головка которой нарисована как буква «e», первая буква имени Enora.",
   "Pourquoi Enora ?": "Зачем Enora?",
   "Ajouté aux favoris": "Добавлено в избранное",
   "Retiré des favoris": "Удалено из избранного",

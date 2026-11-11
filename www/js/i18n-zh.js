@@ -238,7 +238,7 @@ export const DICT = {
   "Curieux": "好奇",
   "D'où vient le nom Enora ?": "“Enora”这个名字的由来",
   "Enora est un prénom breton. C'est la forme bretonne d'Honora, du latin « honor » : l'honneur. Il a été porté par sainte Enora, au VIe siècle, épouse de saint Efflam, présente dans les récits et les chants traditionnels de Bretagne.": "Enora 是一个布列塔尼语名字，是 Honora 的布列塔尼形式，源自拉丁语“honor”，意为“荣誉”。六世纪的圣埃诺拉（圣埃弗拉姆之妻）曾用此名，她出现在布列塔尼的传统故事与歌谣中。",
-  "Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo reprend son initiale, un « E » dont les trois barres ont des longueurs différentes, comme les niveaux d'un égaliseur.": "选用这个名字，是因为它读音清亮、富有音乐感，也表达了本项目的初衷：向音乐和创作音乐的人致敬。标志取其首字母“E”，三条横线长短不一，像均衡器的音量条。",
+  "Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo est une note de musique dont la tête dessine un « e », l'initiale d'Enora.": "选用这个名字，是因为它读音清亮、富有音乐感，也表达了本项目的初衷：向音乐和创作音乐的人致敬。标志是一个音符，符头画成 Enora 的首字母“e”。",
   "Pourquoi Enora ?": "为什么做 Enora？",
   "Ajouté aux favoris": "已加入收藏",
   "Retiré des favoris": "已取消收藏",

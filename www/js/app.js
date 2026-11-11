@@ -2644,7 +2644,7 @@ function viewAbout() {
 
     <div class="set-block about-block"><h3>D'où vient le nom Enora ?</h3>
       <p>Enora est un prénom breton. C'est la forme bretonne d'Honora, du latin « honor » : l'honneur. Il a été porté par sainte Enora, au VIe siècle, épouse de saint Efflam, présente dans les récits et les chants traditionnels de Bretagne.</p>
-      <p>Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo reprend son initiale, un « E » dont les trois barres ont des longueurs différentes, comme les niveaux d'un égaliseur.</p>
+      <p>Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo est une note de musique dont la tête dessine un « e », l'initiale d'Enora.</p>
     </div>
 
     <div class="set-block about-block"><h3>Pourquoi Enora ?</h3>

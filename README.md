@@ -21,6 +21,9 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.8.1
+- **Logo définitif** : une note de musique dont la tête est un « e », d'après le croquis de l'auteur.
+
 ## Nouveautés 1.8.0
 - **Signalement des titres créés par IA** : dans la fiche « Infos du titre », chacun vote avec la flèche haute (c'est de l'IA) ou la flèche basse (ce n'en est pas). Le nombre de signalements est affiché, et rappelé dans les listes (« IA · 12 »). **Un vote par appareil et par titre, sans compte** : il faut la connexion « Anonyme » de Firebase et la règle `aivotes` ci-dessous.
 - **Logo** : un « E » avec sa barre verticale et trois barres de longueurs différentes, comme un égaliseur.

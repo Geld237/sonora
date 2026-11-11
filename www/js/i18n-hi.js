@@ -238,7 +238,7 @@ export const DICT = {
   "Curieux": "जिज्ञासु",
   "D'où vient le nom Enora ?": "Enora नाम कहाँ से आया?",
   "Enora est un prénom breton. C'est la forme bretonne d'Honora, du latin « honor » : l'honneur. Il a été porté par sainte Enora, au VIe siècle, épouse de saint Efflam, présente dans les récits et les chants traditionnels de Bretagne.": "Enora एक ब्रेटन नाम है। यह Honora का ब्रेटन रूप है, जो लैटिन शब्द “honor” यानी सम्मान से आया है। छठी शताब्दी में संत एनोरा, संत एफ़्लाम की पत्नी, का यही नाम था; वे ब्रिटनी की पारंपरिक कथाओं और गीतों में मिलती हैं।",
-  "Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo reprend son initiale, un « E » dont les trois barres ont des longueurs différentes, comme les niveaux d'un égaliseur.": "यह नाम इसकी साफ़ और संगीतमय ध्वनि के लिए चुना गया, और इसलिए भी कि यह परियोजना की बात कहता है: संगीत और उसे रचने वालों का सम्मान। लोगो में इसका पहला अक्षर “E” है, जिसकी तीन रेखाएँ अलग-अलग लंबाई की हैं, जैसे इक्वलाइज़र के स्तर।",
+  "Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo est une note de musique dont la tête dessine un « e », l'initiale d'Enora.": "यह नाम इसकी साफ़ और संगीतमय ध्वनि के लिए चुना गया, और इसलिए भी कि यह परियोजना की बात कहता है: संगीत और उसे रचने वालों का सम्मान। लोगो एक संगीत स्वर-चिह्न है, जिसका सिर Enora के पहले अक्षर “e” का रूप लेता है।",
   "Pourquoi Enora ?": "Enora क्यों?",
   "Ajouté aux favoris": "पसंदीदा में जोड़ा गया",
   "Retiré des favoris": "पसंदीदा से हटाया गया",
