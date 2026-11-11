@@ -103,6 +103,12 @@ function registerMediaKeys() {
 }
 app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (_) {} });
 
+// Couleur des boutons de la fenêtre (réduire, agrandir, fermer) selon le thème clair ou sombre
+ipcMain.handle('sonora:theme', (_e, light) => {
+  if (process.platform !== 'win32' || !mainWin || mainWin.isDestroyed()) return;
+  try { mainWin.setTitleBarOverlay({ color: '#00000000', symbolColor: light ? '#1d1d1f' : '#f5f5f7', height: 44 }); } catch (_) {}
+});
+
 // Mini-lecteur flottant : la fenêtre devient petite et reste au-dessus des autres
 let fullBounds = null;
 ipcMain.handle('sonora:mini', (_e, on) => {
@@ -131,6 +137,9 @@ function createWindow() {
     title: 'Enora',
     backgroundColor: '#0e0f14',
     autoHideMenuBar: true,
+    // Une seule barre : la barre d'onglets d'Enora sert aussi de barre de titre (Windows et Mac)
+    ...(process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: '#f5f5f7', height: 44 } } : {}),
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' } : {}),
     icon: path.join(WWW, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'app-preload.js'),

@@ -4,7 +4,7 @@ const VERSION = 'sonora-__BUILD__';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css', 'css/fonts.css', 'fonts/inter-latin-wght-normal.woff2', 'fonts/inter-latin-ext-wght-normal.woff2', 'js/icons.js',
   'js/app.js', 'js/api.js', 'js/db.js', 'js/player.js', 'js/platform.js', 'js/youtube-player.js',
-  'js/settings.js', 'js/net.js', 'js/lyrics.js', 'js/podcasts.js', 'js/share.js', 'js/recap.js', 'js/rooms.js', 'js/audius.js', 'js/profile.js', 'js/i18n.js', 'js/i18n-en.js', 'js/qrcode.js', 'js/cloud.js', 'js/cloud-config.js', 'js/build-info.js', 'js/updates.js',
+  'js/settings.js', 'js/net.js', 'js/lyrics.js', 'js/podcasts.js', 'js/share.js', 'js/recap.js', 'js/rooms.js', 'js/audius.js', 'js/profile.js', 'js/i18n.js', 'js/i18n-en.js', 'js/i18n-es.js', 'js/i18n-de.js', 'js/i18n-pt.js', 'js/i18n-zh.js', 'js/i18n-ar.js', 'js/i18n-hi.js', 'js/i18n-bn.js', 'js/i18n-ru.js', 'js/party.js', 'js/qrcode.js', 'js/cloud.js', 'js/cloud-config.js', 'js/build-info.js', 'js/updates.js',
   'icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 

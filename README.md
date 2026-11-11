@@ -21,6 +21,18 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.7.0
+- **Blind test en soirée** : l'appareil de l'hôte diffuse la musique et affiche un **QR code** ; chacun répond sur son téléphone (version web, sans installation). Classement en direct, **équipes** (2 à 4) ou chacun pour soi.
+- **Réglages du jeu** : nombre d'extraits, temps par extrait, nombre de réponses, titre ou artiste à deviner.
+- **Nuage de mots** (Bibliothèque → Historique → « Mon nuage musical ») : l'humeur musicale déduite, sur l'appareil, des styles écoutés, de leur rythme, des heures et du temps d'écoute. Image à enregistrer ou partager.
+- **Dix langues** : français, anglais, espagnol, allemand, portugais, chinois, arabe (affichage de droite à gauche), hindi, bengali, russe. Les traductions se corrigent dans `scripts/i18n-core.py` (puis `python3 scripts/i18n-core.py`) et `www/js/i18n-en.js`.
+- **Nouveau logo** : un « e » dessiné comme un disque qui tourne (`resources/logo.svg`, icônes régénérées par `scripts/make-icons.sh`).
+- **Une seule barre sur ordinateur** : les onglets servent de barre de titre (Windows et Mac).
+- **Infos** : l'origine du nom Enora.
+
+### Jouer en soirée sans compte
+Pour que les invités rejoignent une partie sans créer de compte, activez dans Firebase **Authentication → Sign-in method → Anonyme**. Sinon, chaque joueur doit être connecté à un compte Enora. La règle Firestore `rooms` (voir « Compte et synchronisation ») est nécessaire dans les deux cas.
+
 ## Nouveautés 1.6.0
 - **Nouvelle source : Audius** (Musique → « Indépendants ») : des artistes indépendants qui publient eux-mêmes leur musique, en écoute complète, via l'API publique d'Audius. Si Audius demande un jour une clé, ajoutez le secret GitHub `AUDIUS_API_KEY` (gratuit).
 - **Parcourir par humeur, moment de la journée, activité ou époque**, en plus du style.

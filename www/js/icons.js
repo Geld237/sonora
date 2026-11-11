@@ -52,6 +52,9 @@ export const I = {
   sliders: svg('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
   game: svg('<path d="M7.500 8h9a4.500 4.500 0 014.4 5.400l-.5 2.600a2.600 2.600 0 01-4.600 1.100L14.500 15.500h-5L8.200 17.100a2.600 2.600 0 01-4.600-1.100l-.5-2.600A4.500 4.500 0 017.500 8z"/><path d="M8 11v3M6.500 12.500h3M15.500 11.500v.2M17.500 13.500v.2"/>'),
   bolt: svg('<path d="M13 3L5 13.500h6l-1 7.500 8-10.500h-6z"/>'),
+  // Logo d'Enora : un « e » dessiné comme un disque qui tourne
+  logo: `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 12h11.600a5.800 5.800 0 1 0-1.700 4.100"/></svg>`,
+  cloud: svg('<path d="M7 18.500a4.500 4.500 0 01-.6-8.960 5.500 5.500 0 0110.700 1.060A3.950 3.950 0 0117 18.500z"/>'),
   users: svg('<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19.5c.6-3.4 3-5 6-5s5.4 1.6 6 5"/><circle cx="17" cy="9.5" r="2.4"/><path d="M17 14.3c2.2.2 3.6 1.6 4 4.2"/>'),
   share: svg('<path d="M12 15V4M8 7.5L12 3.5l4 4M5 12v6.5A1.5 1.5 0 006.5 20h11a1.5 1.5 0 001.5-1.5V12"/>'),
   pip: svg('<rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="12" y="12" width="6.5" height="4.5" rx="1" fill="currentColor" stroke="none"/>'),

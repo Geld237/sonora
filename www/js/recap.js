@@ -20,6 +20,10 @@ export function recordListen(track, style = '') {
   if (artist) m.a[artist] = (m.a[artist] || 0) + 1;
   if (!track.live) { const e = m.t[track.key] || (m.t[track.key] = [track.title, artist, 0]); e[2]++; }
   if (style) m.g[style] = (m.g[style] || 0) + 1;
+  // Heure d'écoute et humeur du titre : servent au nuage de mots
+  const h = new Date().getHours();
+  (m.h || (m.h = {}))[h] = (m.h[h] || 0) + 1;
+  if (track.mood) (m.m || (m.m = {}))[track.mood] = (m.m[track.mood] || 0) + 1;
   prune(m.a, 40); prune(m.t, 40, (v) => v[2]); prune(m.g, 20);
   const months = Object.keys(all).sort();
   for (const k of months.slice(0, Math.max(0, months.length - 36))) delete all[k];
@@ -34,9 +38,11 @@ export function recap(period = 'month') {
   const all = load();
   const now = new Date();
   const keys = Object.keys(all).filter((k) => period === 'all' || (period === 'year' ? k.startsWith(String(now.getFullYear())) : k === monthOf(now)));
-  const out = { n: 0, s: 0, a: {}, t: {}, g: {} };
+  const out = { n: 0, s: 0, a: {}, t: {}, g: {}, h: {}, m: {} };
   for (const k of keys) {
     const m = all[k];
+    for (const [x, n] of Object.entries(m.h || {})) out.h[x] = (out.h[x] || 0) + n;
+    for (const [x, n] of Object.entries(m.m || {})) out.m[x] = (out.m[x] || 0) + n;
     out.n += m.n || 0; out.s += m.s || 0;
     for (const [a, n] of Object.entries(m.a || {})) out.a[a] = (out.a[a] || 0) + n;
     for (const [g, n] of Object.entries(m.g || {})) out.g[g] = (out.g[g] || 0) + n;
@@ -47,6 +53,7 @@ export function recap(period = 'month') {
   return {
     period, label, listens: out.n, minutes: Math.round(out.s / 60),
     artists: top(out.a, 5), styles: top(out.g, 3),
+    allArtists: top(out.a, 14), allStyles: top(out.g, 10), hours: out.h, moods: out.m, distinctArtists: Object.keys(out.a).length,
     titles: Object.values(out.t).sort((x, y) => y[2] - x[2]).slice(0, 5),
   };
 }
@@ -110,5 +117,120 @@ export function drawRecap(r, tr = (s) => s) {
   y = list(tr('Titres les plus écoutés'), r.titles.length ? r.titles.slice(0, Math.max(1, Math.min(5, Math.floor((H - y - 240) / 58)))).map((t) => [t[1] ? `${t[0]} · ${t[1]}` : t[0], `${t[2]}×`]) : [['—', '']], y);
   if (r.styles.length && y < H - 150) { txt(tr('Style préféré'), 80, y, 34, 700, '#ff375f'); txt(r.styles.map((s) => s[0]).join(' · '), 80, y + 56, 40, 700); }
   txt(tr('Fait avec Enora · sans publicité'), 80, H - 60, 26, 500, '#8e8e93');
+  return c;
+}
+
+/* =========================================================================
+   Nuage de mots : l'humeur musicale déduite des écoutes (styles, humeurs, rythme, heures, durée)
+   ========================================================================= */
+// Chaque famille de styles donne un niveau d'énergie (1 à 3) et deux traits d'humeur
+const TRAITS = [
+  [/amapiano|afrobeats|coupé|ndombolo|makossa|bikutsi|mbalax|zouglou|afro house|dancehall|soca|shatta|reggaeton|salsa|house|techno|edm|danse|fête|afro$/i, 3, ['Festif', 'Dansant']],
+  [/rap|drill|trap|métal|metal|rock|sport|motivation|colère|hip-hop/i, 3, ['Énergique', 'Intense']],
+  [/r&b|soul|zouk|kompa|rumba|romantique|bachata|sensual/i, 2, ['Romantique', 'Sensuel']],
+  [/gospel|louange|devotional/i, 2, ['Spirituel', 'Lumineux']],
+  [/lo-?fi|ambient|classi|piano|jazz|blues|calme|détente|sommeil|concentration|travail|acoust/i, 1, ['Posé', 'Rêveur']],
+  [/triste|nostalgie|chanson|variété|années/i, 2, ['Nostalgique', 'Sentimental']],
+  [/nuit|soirée/i, 2, ['Nocturne', 'Feutré']],
+  [/pop|joyeux|tendances|latin|highlife|matin|réveil|cuisine|voiture|électro|electronic|world|monde/i, 2, ['Joyeux', 'Solaire']],
+];
+const AUDIUS_MOODS = {
+  Upbeat: [3, 'Joyeux'], Excited: [3, 'Énergique'], Energizing: [3, 'Énergique'], Rowdy: [3, 'Festif'], Aggressive: [3, 'Intense'], Fiery: [3, 'Intense'], Defiant: [3, 'Intense'],
+  Empowering: [2, 'Inspirant'], Stirring: [2, 'Inspirant'], Cool: [2, 'Élégant'], Sophisticated: [2, 'Élégant'], Romantic: [2, 'Romantique'], Sensual: [2, 'Sensuel'], Gritty: [2, 'Brut'],
+  Peaceful: [1, 'Posé'], Tender: [1, 'Tendre'], Easygoing: [1, 'Détendu'], Melancholy: [1, 'Mélancolique'], Sentimental: [1, 'Sentimental'], Yearning: [1, 'Nostalgique'], Brooding: [1, 'Nocturne'], Serious: [2, 'Sérieux'],
+};
+
+/** Portrait musical d'une période : mots pondérés + phrase de résumé. `history` sert aux heures des écoutes plus anciennes. */
+export function musicProfile(period = 'month', history = [], tr = (s) => s) {
+  const r = recap(period);
+  const mood = {};
+  let energy = 0, eW = 0;
+  const addMood = (w, n) => { mood[w] = (mood[w] || 0) + n; };
+  for (const [style, n] of r.allStyles) {
+    const t = TRAITS.find((x) => x[0].test(style));
+    if (!t) continue;
+    energy += t[1] * n; eW += n;
+    addMood(t[2][0], n); addMood(t[2][1], n * 0.6);
+  }
+  for (const [m, n] of Object.entries(r.moods)) {
+    const t = AUDIUS_MOODS[m];
+    if (!t) continue;
+    energy += t[0] * n; eW += n; addMood(t[1], n);
+  }
+  // Heures d'écoute : compteurs du mois + historique récent
+  const hours = { ...r.hours };
+  if (!Object.keys(hours).length) for (const x of history) { const h = new Date(x.t).getHours(); hours[h] = (hours[h] || 0) + 1; }
+  const slot = (a, b) => { let n = 0; for (let h = a; h !== b; h = (h + 1) % 24) n += hours[h] || 0; return n; };
+  const slots = [['Noctambule', slot(23, 5)], ['Lève-tôt', slot(5, 9)], ['Auditeur du matin', slot(9, 12)], ['Auditeur de l\'après-midi', slot(12, 18)], ['Auditeur du soir', slot(18, 23)]].sort((a, b) => b[1] - a[1]);
+  const moods = Object.entries(mood).sort((a, b) => b[1] - a[1]);
+  const avg = eW ? energy / eW : 0;
+  const tempo = !avg ? '' : avg >= 2.5 ? 'Rythme soutenu' : avg >= 1.7 ? 'Rythme modéré' : 'Rythme lent';
+  const words = [];
+  const top = Math.max(1, moods[0]?.[1] || 1);
+  moods.slice(0, 6).forEach(([w, n]) => words.push({ t: tr(w), w: 0.55 + 0.45 * (n / top), kind: 'mood' }));
+  const sTop = Math.max(1, r.allStyles[0]?.[1] || 1);
+  r.allStyles.forEach(([w, n]) => words.push({ t: tr(w), w: 0.3 + 0.4 * (n / sTop), kind: 'style' }));
+  const aTop = Math.max(1, r.allArtists[0]?.[1] || 1);
+  r.allArtists.forEach(([w, n]) => words.push({ t: w, w: 0.22 + 0.4 * (n / aTop), kind: 'artist' }));
+  if (tempo) words.push({ t: tr(tempo), w: 0.5, kind: 'fact' });
+  if (slots[0][1]) words.push({ t: tr(slots[0][0]), w: 0.46, kind: 'fact' });
+  const hrs = r.minutes >= 90 ? `${Math.round(r.minutes / 60)} h` : `${r.minutes} min`;
+  if (r.minutes) words.push({ t: `${hrs} ${tr('d\'écoute')}`, w: 0.42, kind: 'fact' });
+  if (r.listens) words.push({ t: `${r.listens} ${tr(r.listens > 1 ? 'écoutes' : 'écoute')}`, w: 0.3, kind: 'fact' });
+  if (r.listens >= 8) {
+    const div = r.distinctArtists / r.listens;
+    words.push({ t: tr(div > 0.6 ? 'Explorateur' : div < 0.25 ? 'Fidèle' : 'Curieux'), w: 0.38, kind: 'fact' });
+  }
+  if (r.minutes >= 600) words.push({ t: tr('Marathonien'), w: 0.36, kind: 'fact' });
+  const headline = moods.length
+    ? [`${tr(moods[0][0])}${moods[1] ? ` · ${tr(moods[1][0])}` : ''}`, tempo && tr(tempo), slots[0][1] ? tr(slots[0][0]) : '', r.minutes ? `${hrs} ${tr('d\'écoute')}` : ''].filter(Boolean).join(' · ')
+    : '';
+  // Un même mot (ex. « Romantique » comme humeur et comme catégorie) n'apparaît qu'une fois
+  const uniq = new Map();
+  for (const w of words) { const k = w.t.toLowerCase(); if (!uniq.has(k) || uniq.get(k).w < w.w) uniq.set(k, w); }
+  return { label: r.label, listens: r.listens, words: [...uniq.values()], headline };
+}
+
+/** Dessine le nuage (image carrée 1080 × 1080) : les mots les plus importants sont au centre et plus gros. */
+export function drawCloud(profile, tr = (s) => s) {
+  const W = 1080, H = 1080;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const FONT = '-apple-system, "SF Pro Display", Inter, "Segoe UI", "Noto Sans", sans-serif';
+  x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+  const glow = (cx, cy, rad, col) => { const g = x.createRadialGradient(cx, cy, 0, cx, cy, rad); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, W, H); };
+  glow(920, 140, 600, 'rgba(255,55,95,.5)'); glow(120, 1000, 560, 'rgba(94,92,230,.45)');
+  x.textBaseline = 'alphabetic';
+  x.fillStyle = '#ff375f'; x.beginPath(); x.roundRect(64, 56, 60, 60, 15); x.fill();
+  x.font = `800 44px ${FONT}`; x.fillStyle = '#fff'; x.fillText('e', 81, 101);
+  x.font = `700 38px ${FONT}`; x.fillStyle = '#f5f5f7'; x.fillText(tr('Mon nuage musical'), 142, 86);
+  x.font = `500 26px ${FONT}`; x.fillStyle = '#8e8e93'; x.fillText(profile.label, 142, 120);
+  const COLORS = { mood: ['#ffffff', '#ff6482', '#ff375f'], style: ['#bf5af2', '#da8fff', '#9d8cff'], artist: ['#d1d1d6', '#aeaeb2', '#e5e5ea'], fact: ['#ff9f0a', '#ffd60a', '#64d2ff'] };
+  const placed = [];
+  const hit = (r) => placed.some((p) => r.x < p.x + p.w && r.x + r.w > p.x && r.y < p.y + p.h && r.y + r.h > p.y);
+  const words = profile.words.slice().sort((a, b) => b.w - a.w).slice(0, 38);
+  const cx = W / 2, cy = H / 2 + 50;
+  words.forEach((wd, i) => {
+    let size = Math.round(34 + 118 * Math.pow(wd.w, 1.5));
+    const weight = wd.kind === 'mood' ? 800 : wd.kind === 'artist' ? 600 : 700;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      x.font = `${weight} ${size}px ${FONT}`;
+      const w = Math.min(x.measureText(wd.t).width, W - 120) + 22, h = size * 1.08 + 10;
+      for (let t = 0; t < 900; t++) {
+        const a = t * 0.31 + i, rad = 3.6 * t * 0.9;
+        const r = { x: cx + Math.cos(a) * rad * 1.15 - w / 2, y: cy + Math.sin(a) * rad * 0.82 - h / 2, w, h };
+        if (r.x < 40 || r.y < 170 || r.x + w > W - 40 || r.y + h > H - 70 || hit(r)) continue;
+        placed.push(r);
+        x.fillStyle = COLORS[wd.kind][i % 3];
+        x.globalAlpha = wd.kind === 'artist' ? 0.9 : 1;
+        x.fillText(wd.t, r.x + 11, r.y + h - size * 0.24 - 5, W - 120);
+        x.globalAlpha = 1;
+        return;
+      }
+      size = Math.round(size * 0.78); // pas de place : on réessaie plus petit
+    }
+  });
+  x.font = `500 24px ${FONT}`; x.fillStyle = '#8e8e93'; x.fillText(tr('Fait avec Enora · sans publicité'), 64, H - 34);
   return c;
 }

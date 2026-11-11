@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Logo d'Enora : un « e » dessiné comme un disque qui tourne. Fond plein (les systèmes arrondissent eux-mêmes les coins). -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff5c7a"/><stop offset=".55" stop-color="#ff375f"/><stop offset="1" stop-color="#c2255c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#g)"/>
+  <path d="M297 512H727A215 215 0 1 0 664 664" fill="none" stroke="#fff" stroke-width="100" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

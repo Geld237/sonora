@@ -9,6 +9,8 @@ if (process.isMainFrame) {
     http: (req) => ipcRenderer.invoke('sonora:http', req),
     // Page de résultats YouTube chargée dans une fenêtre invisible (recherche la plus fiable)
     ytPage: (url) => ipcRenderer.invoke('sonora:ytpage', url),
+    frameless: process.platform === 'win32' || process.platform === 'darwin', // la barre d'onglets sert de barre de titre
+    setTheme: (light) => ipcRenderer.invoke('sonora:theme', !!light),
     // Mini-lecteur flottant et touches multimédia du clavier
     setMini: (on) => ipcRenderer.invoke('sonora:mini', !!on),
     onMedia: (fn) => ipcRenderer.on('sonora:media', (_e, action) => fn(action)),

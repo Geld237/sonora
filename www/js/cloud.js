@@ -145,10 +145,39 @@ async function writeRemote(data) {
   }
 }
 
-/** Requête authentifiée vers un autre document Firestore (salons d'écoute à plusieurs). */
-export async function authFetch(path, { method = 'GET', body = null } = {}) {
-  const s = await token();
-  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(getConfig().projectId)}/databases/(default)/documents/${path}`;
+/* ---------- Invités (jeu en soirée) : identité anonyme, sans adresse e-mail ---------- */
+const GUEST_KEY = 'sonora.cloud.guest';
+async function guestToken() {
+  if (!isConfigured()) throw new Error('Le jeu à plusieurs n\'est pas activé dans cette version.');
+  const keep = (d, old) => {
+    const g = { uid: d.localId || d.user_id || old?.uid, idToken: d.idToken || d.id_token, refreshToken: d.refreshToken || d.refresh_token, expiresAt: Date.now() + (parseInt(d.expiresIn || d.expires_in || '3600', 10) - 60) * 1000 };
+    ls.set(GUEST_KEY, g);
+    return g;
+  };
+  const g = ls.get(GUEST_KEY);
+  if (g && Date.now() < g.expiresAt) return g;
+  if (g?.refreshToken) {
+    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${getConfig().apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: g.refreshToken }).toString() });
+    if (res.ok) return keep(await res.json(), g);
+  }
+  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${getConfig().apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ returnSecureToken: true }) });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const e = new Error(/ADMIN_ONLY_OPERATION|OPERATION_NOT_ALLOWED/.test(d?.error?.message || '')
+      ? 'Pour jouer sans compte, la connexion « Anonyme » doit être activée dans Firebase. En attendant, connectez-vous à un compte Enora (Réglages → Compte).'
+      : (d?.error?.message || `HTTP ${res.status}`));
+    e.code = 'GUEST_DISABLED';
+    throw e;
+  }
+  return keep(d);
+}
+/** Jeton de l'utilisateur connecté, sinon d'un invité anonyme. */
+export const anyToken = () => (isLoggedIn() ? token() : guestToken());
+
+/** Requête authentifiée vers un autre document Firestore (salons d'écoute à plusieurs, jeu en soirée). */
+export async function authFetch(path, { method = 'GET', body = null, guest = false } = {}) {
+  const s = guest ? await anyToken() : await token();
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(getConfig().projectId)}/databases/(default)/documents${path.startsWith(':') ? '' : '/'}${path}`;
   const res = await fetch(url, { method, headers: { Authorization: `Bearer ${s.idToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) {

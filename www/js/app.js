@@ -3,12 +3,13 @@ import { iaSearch, musicQuery, filmQuery, iaAlbum, iaFilm, radioSearch, ytTrendi
 import { ytMedia } from './youtube-player.js';
 import { getSettings, setSetting, markSettingsChanged, settingsChangedAt, SETTINGS_TS_KEY, dataSaverActive } from './settings.js';
 import { fetchLyrics } from './lyrics.js';
-import { recordListen, recap, tastes, drawRecap, statsData, setStatsData } from './recap.js';
+import { recordListen, recap, tastes, drawRecap, statsData, setStatsData, musicProfile, drawCloud } from './recap.js';
 import { encodePlaylist, decodePlaylist, parseTrackList } from './share.js';
 import { podcastSearch, podcastTop, podcastLookup, podcastFeed, getSubscriptions, setSubscriptions, isSubscribed, toggleSubscription, getPosition, setPosition } from './podcasts.js';
 import { initRooms, createRoom, joinRoom, leaveRoom, pushState, currentRoom, onRoom } from './rooms.js';
-import { applyLanguage, tr } from './i18n.js';
+import { applyLanguage, tr, LANGS } from './i18n.js';
 import qrcode from './qrcode.js';
+import { newCode, cleanCode, myId, hostWrite, hostClose, hostPlayers, readParty, playerWrite, playerLeave } from './party.js';
 import { getProfile, getProfileName, setProfileName, cleanName, randomName, ensureProfileName } from './profile.js';
 import { AUDIUS_GENRES, audiusTrending, audiusSearch, audiusMood } from './audius.js';
 import * as cloud from './cloud.js';
@@ -565,7 +566,7 @@ let current = { name: 'library', params: {} };
 const cache = { music: null, films: null, radio: null, pod: null, feeds: null };
 
 function go(name, params = {}) {
-  if (game && name !== 'game') abortGame(); // quitter l'onglet arrête la partie
+  if (game && name !== 'game') { if (game.mode === 'guest' || (game.mode === 'host' && game.phase !== 'end')) { if (!window.confirm(tr('Quitter la partie en cours ?'))) return; } abortGame(); } // quitter l'onglet arrête la partie
   current = { name, params };
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === (params.tab || name)));
   render();
@@ -628,13 +629,14 @@ async function viewLibrary() {
     // Récemment écoutés : un seul exemplaire par titre
     const seen = new Set();
     const recent = h.filter((x) => !seen.has(x.track.key) && seen.add(x.track.key)).slice(0, 50).map((x) => hydrate(x.track));
-    body = !h.length ? `<div class="empty"><div class="big">${I.clock}</div>Aucune écoute pour l'instant.<br>Les titres écoutés plus de 15 secondes apparaîtront ici.</div>` : `
+    const recapBtns = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 6px"><button class="btn" id="open-recap">${ic('chart', 'Ma rétrospective')}</button><button class="btn ghost" id="open-cloud">${ic('cloud', 'Mon nuage musical')}</button></div>`;
+    body = !h.length ? `${Object.keys(statsData()).length ? recapBtns : ''}<div class="empty"><div class="big">${I.clock}</div>Aucune écoute pour l'instant.<br>Les titres écoutés plus de 15 secondes apparaîtront ici.</div>` : `
       <div class="stats">
         <div class="stat"><b>${st.week}</b><span>écoutes cette semaine</span></div>
         <div class="stat"><b>${st.total}</b><span>écoutes au total</span></div>
         <div class="stat wide"><span>Artistes les plus écoutés</span><b class="small-b">${st.top.map(([a, n]) => `${esc(a)} <i>${n}</i>`).join(' · ')}</b></div>
       </div>
-      <button class="btn" id="open-recap" style="margin:4px 0 6px">${ic('chart', 'Ma rétrospective')}</button>
+      ${recapBtns}
       <div class="h2row"><h2>Récemment écoutés</h2><button class="btn ghost" id="hist-clear">Effacer l'historique</button></div>
       ${trackRows(recent)}`;
   } else if (libTab === 'favs') {
@@ -662,6 +664,7 @@ async function viewLibrary() {
   if (hc) hc.onclick = async () => { if (await confirmBox('Effacer tout l\'historique d\'écoute ?', 'Effacer')) { try { localStorage.removeItem(HISTORY_KEY); } catch (_) {} render(true); } };
   $('#open-search').onclick = openGlobalSearch;
   const rc = $('#open-recap'); if (rc) rc.onclick = () => openRecap();
+  const oc = $('#open-cloud'); if (oc) oc.onclick = () => openRecap('month', 'cloud');
   const ip = $('#imp-pl'); if (ip) ip.onclick = () => openImportModal();
   $('#open-settings').onclick = () => go('settings', { tab: isMobile ? 'library' : 'settings' });
   view.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { libFilter = b.dataset.filter; render(true); }));
@@ -724,18 +727,24 @@ async function viewPlaylist({ id }) {
 }
 
 /* =========================================================================
-   Jeu : blind test (un extrait, quatre réponses, un chrono)
+   Jeu : blind test — seul, ou en soirée (l'hôte diffuse le son, les joueurs répondent sur leur téléphone)
    ========================================================================= */
 const GAME_BEST = 'sonora.game.best';
-const GAME_ROUNDS = 10;
-const GAME_TIME = 15;
+const GAME_CFG = 'sonora.game.cfg';
+const GAME_DEFAULT = { rounds: 10, time: 15, options: 4, guess: 'title', teams: 0 };
+const TEAMS = [['Rouge', '#ff453a'], ['Bleu', '#0a84ff'], ['Vert', '#30d158'], ['Jaune', '#ffd60a']];
 let game = null;          // partie en cours
 let gamePool = 'trend';   // catégorie choisie
-const gameActive = () => !!game && (game.phase === 'load' || game.phase === 'play' || game.phase === 'reveal');
+let partyPrefill = '';    // code reçu par lien / QR code
+const gameCfg = () => { try { return { ...GAME_DEFAULT, ...(JSON.parse(localStorage.getItem(GAME_CFG)) || {}) }; } catch (_) { return { ...GAME_DEFAULT }; } };
+const setGameCfg = (k, v) => { const c = gameCfg(); c[k] = v; try { localStorage.setItem(GAME_CFG, JSON.stringify(c)); } catch (_) {} };
+const gameActive = () => !!game && game.mode !== 'guest' && ['load', 'play', 'reveal'].includes(game.phase);
 const gameBest = () => { try { return JSON.parse(localStorage.getItem(GAME_BEST)) || {}; } catch (_) { return {}; } };
 const shuffled = (l) => { const a = l.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const gamePools = () => [['trend', 'Tendances'], ['lib', 'Ma bibliothèque'], ...MUSIC_CATEGORIES.map(([c]) => [`cat:${c}`, c]), ...THEMES.era[1].map(([n]) => [`era:${n}`, n])];
 const poolName = (id) => (gamePools().find((p) => p[0] === id) || gamePools()[0])[1];
+const multOf = (streak) => (streak >= 5 ? 3 : streak >= 3 ? 2 : 1);
+const pointsFor = (leftRatio, streak) => (100 + Math.round(Math.max(0, Math.min(1, leftRatio)) * 100)) * multOf(streak);
 
 async function loadGamePool(id) {
   let list;
@@ -753,7 +762,7 @@ async function loadGamePool(id) {
 }
 
 function stopGameAudio() {
-  clearInterval(game?.tick); clearTimeout(game?.wait); clearTimeout(game?.nextT);
+  clearInterval(game?.tick); clearTimeout(game?.wait); clearTimeout(game?.nextT); clearInterval(game?.poll);
   try { player.el.pause(); } catch (_) {}
   player.queue = []; player.index = -1;
   if (player.el === ytMedia) { try { ytMedia.stop(); } catch (_) {} }
@@ -761,41 +770,40 @@ function stopGameAudio() {
 }
 function abortGame() {
   if (!game) return;
-  stopGameAudio();
+  const g = game;
+  if (g.mode === 'guest') clearInterval(g.poll); else stopGameAudio();
+  if (g.mode === 'host' && g.code) hostClose(g.code);
+  if (g.mode === 'guest' && g.code && g.me) playerLeave(g.code, g.me.id);
   game = null;
   document.body.classList.remove('game-on');
 }
 
-async function startGame() {
-  game = { phase: 'load', pool: gamePool, i: 0, score: 0, streak: 0, bestStreak: 0, good: 0, played: [], skips: 0 };
-  document.body.classList.add('game-on');
-  closeNowPlaying();
-  renderGame();
-  try {
-    const pool = shuffled(await loadGamePool(gamePool));
-    if (!game) return;
-    if (pool.length < 4) throw new Error(gamePool === 'lib' ? 'Il faut au moins 4 titres dans vos favoris, playlists ou fichiers pour jouer avec votre bibliothèque.' : 'Pas assez de titres pour cette catégorie. Essayez-en une autre.');
-    game.tracks = pool;
-    game.rounds = Math.min(GAME_ROUNDS, pool.length);
-    game.cursor = 0;
-    nextRound();
-  } catch (e) {
-    const msg = e.message || String(e);
-    abortGame();
-    renderGame(msg);
-  }
+/** Prépare les manches : titres, nombre de manches, réponses proposées. */
+async function prepareGame() {
+  const cfg = game.cfg;
+  const pool = shuffled(await loadGamePool(game.pool));
+  if (!game) return false;
+  if (pool.length < cfg.options) throw new Error(game.pool === 'lib' ? `Il faut au moins ${cfg.options} titres dans vos favoris, playlists ou fichiers pour jouer avec votre bibliothèque.` : 'Pas assez de titres pour cette catégorie. Essayez-en une autre.');
+  game.tracks = pool;
+  game.rounds = Math.min(cfg.rounds, pool.length);
+  game.cursor = 0;
+  return true;
 }
-
-function nextRound() {
-  if (!game) return;
-  if (game.i >= game.rounds || game.cursor >= game.tracks.length) return endGame();
-  const answer = game.tracks[game.cursor++];
-  const others = shuffled(game.tracks.filter((t) => t.key !== answer.key && fold(t.title) !== fold(answer.title))).slice(0, 3);
-  game.answer = answer;
-  game.options = shuffled([answer, ...others]);
-  game.phase = 'load';
-  game.picked = null;
-  renderGame();
+/** Tire le titre de la manche et les fausses réponses (titres ou artistes différents). */
+function drawRound() {
+  const g = game;
+  const answer = g.tracks[g.cursor++];
+  const byArtist = g.cfg.guess === 'artist';
+  const label = (t) => fold(byArtist ? t.artist : t.title);
+  const seen = new Set([label(answer)]);
+  const others = shuffled(g.tracks.filter((t) => t.key !== answer.key)).filter((t) => !seen.has(label(t)) && seen.add(label(t))).slice(0, g.cfg.options - 1);
+  g.answer = answer;
+  g.options = shuffled([answer, ...others]);
+  g.picked = null;
+  g.phase = 'load';
+}
+/** Lance l'extrait ; appelle onStart quand le son démarre, onFail si le titre est indisponible. */
+function playClip(answer, onStart, onTick, onFail) {
   player.shuffle = false; player.repeat = 'off';
   player.playList([answer], 0).catch(() => {});
   const t0 = Date.now();
@@ -805,37 +813,52 @@ function nextRound() {
     if (!game || game.answer !== answer) return;
     const el = player.el;
     if (game.phase === 'load') {
-      if (game.failed || Date.now() - t0 > 9000) { // extrait indisponible : on passe au titre suivant sans compter la manche
-        game.failed = false; clearInterval(game.tick);
-        if (++game.skips > 4) { const m = 'La lecture ne démarre pas. Vérifiez votre connexion, ou jouez avec « Ma bibliothèque ».'; abortGame(); renderGame(m); return; }
-        nextRound(); return;
-      }
+      if (game.failed || Date.now() - t0 > 9000) { game.failed = false; clearInterval(game.tick); onFail(); return; }
       if (player.current?.key === answer.key && !el.paused && el.currentTime > 0.2) {
         const dur = answer.duration || (isFinite(el.duration) ? el.duration : 0);
         if (!seeked && dur > 90) { seeked = true; try { el.currentTime = Math.floor(dur * 0.35); } catch (_) {} }
         game.phase = 'play'; game.t0 = Date.now();
-        renderGame();
+        onStart();
       }
       return;
     }
     if (game.phase === 'play') {
-      const left = GAME_TIME - (Date.now() - game.t0) / 1000;
+      const left = game.cfg.time - (Date.now() - game.t0) / 1000;
       const n = $('#g-count'); if (n) n.textContent = Math.max(0, Math.ceil(left));
-      if (left <= 0) answerGame(null);
+      onTick(left);
     }
   }, 200);
 }
+function clipFailed(next) {
+  if (++game.skips > 4) { const m = 'La lecture ne démarre pas. Vérifiez votre connexion, ou jouez avec « Ma bibliothèque ».'; abortGame(); renderGame(m); return; }
+  next();
+}
 
+/* ---------- Partie seul ---------- */
+async function startGame() {
+  game = { mode: 'solo', phase: 'load', pool: gamePool, cfg: gameCfg(), i: 0, score: 0, streak: 0, bestStreak: 0, good: 0, played: [], skips: 0 };
+  document.body.classList.add('game-on');
+  closeNowPlaying();
+  renderGame();
+  try { if (await prepareGame()) nextRound(); }
+  catch (e) { const msg = e.message || String(e); abortGame(); renderGame(msg); }
+}
+function nextRound() {
+  if (!game) return;
+  if (game.i >= game.rounds || game.cursor >= game.tracks.length) return endGame();
+  drawRound();
+  renderGame();
+  playClip(game.answer, renderGame, (left) => { if (left <= 0) answerGame(null); }, () => clipFailed(nextRound));
+}
 function answerGame(key) {
-  if (!game || game.phase !== 'play') return;
+  if (!game || game.phase !== 'play' || game.mode !== 'solo') return;
   clearInterval(game.tick);
-  const left = Math.max(0, GAME_TIME - (Date.now() - game.t0) / 1000);
+  const left = Math.max(0, game.cfg.time - (Date.now() - game.t0) / 1000);
   const ok = key === game.answer.key;
   let gained = 0;
   if (ok) {
     game.streak++; game.good++;
-    const mult = game.streak >= 5 ? 3 : game.streak >= 3 ? 2 : 1;
-    gained = (100 + Math.round((left / GAME_TIME) * 100)) * mult;
+    gained = pointsFor(left / game.cfg.time, game.streak);
     game.score += gained;
     game.bestStreak = Math.max(game.bestStreak, game.streak);
   } else game.streak = 0;
@@ -846,7 +869,6 @@ function answerGame(key) {
   renderGame();
   game.nextT = setTimeout(nextRound, 2200);
 }
-
 function endGame() {
   const g = game;
   stopGameAudio();
@@ -857,44 +879,260 @@ function endGame() {
   if (g.record) { best[g.pool] = g.score; try { localStorage.setItem(GAME_BEST, JSON.stringify(best)); } catch (_) {} }
   renderGame();
 }
-
 function gameRank(g) {
   const r = g.rounds ? g.good / g.rounds : 0;
   return r >= 0.9 ? 'Oreille absolue' : r >= 0.7 ? 'Mélomane confirmé' : r >= 0.5 ? 'Bonne oreille' : r >= 0.3 ? 'En rodage' : 'Touriste du son';
 }
 
+/* ---------- Mode soirée : hôte ---------- */
+const partyLink = (code) => `${webAppUrl()}#party=${code}`;
+const optLabels = (g) => g.options.map((o) => (g.cfg.guess === 'artist' ? { t: o.artist || '—', a: '' } : { t: o.title, a: o.artist || '' }));
+function hostState(extra = {}) {
+  const g = game;
+  return { v: 1, host: getProfileName() || 'Hôte', cfg: g.cfg, pool: poolName(g.pool), phase: g.phase === 'load' ? 'wait' : g.phase, i: g.i, rounds: g.rounds || g.cfg.rounds, n: ++g.seq, board: partyBoard(), ...extra };
+}
+function partyBoard() {
+  return Object.values(game.players).map((p) => ({ id: p.id, name: p.name, team: p.team || 0, score: p.score || 0, last: p.last || 0, ok: !!p.ok })).sort((a, b) => b.score - a.score);
+}
+async function refreshPlayers() {
+  const list = await hostPlayers(game.code);
+  for (const p of list) {
+    const cur = game.players[p.id] || (game.players[p.id] = { id: p.id, score: 0, streak: 0 });
+    cur.name = String(p.name).slice(0, 20); cur.team = p.team || 0; cur.i = p.i; cur.pick = p.pick; cur.ms = p.ms;
+  }
+  return list;
+}
+async function startParty() {
+  const cfg = gameCfg();
+  game = { mode: 'host', phase: 'lobby', pool: gamePool, cfg, code: newCode(), players: {}, seq: 0, i: 0, played: [], skips: 0 };
+  renderGame();
+  try {
+    await hostWrite(game.code, hostState());
+    game.poll = setInterval(async () => {
+      if (!game || game.mode !== 'host' || game.phase !== 'lobby') return;
+      try { const before = Object.keys(game.players).length; await refreshPlayers(); if (Object.keys(game.players).length !== before) { hostWrite(game.code, hostState()).catch(() => {}); renderGame(); } } catch (_) {}
+    }, 2000);
+  } catch (e) {
+    const msg = e.code === 'PERMISSION_DENIED' || e.status === 403 ? 'Le mode soirée a besoin de la règle Firestore des salons (voir le README, « Compte et synchronisation »).' : (e.message || String(e));
+    game = null; renderGame(msg);
+  }
+}
+async function launchParty() {
+  if (!game || game.mode !== 'host') return;
+  clearInterval(game.poll);
+  game.phase = 'load';
+  for (const p of Object.values(game.players)) { p.score = 0; p.streak = 0; p.last = 0; }
+  game.i = 0; game.played = []; game.skips = 0; game.options = null;
+  document.body.classList.add('game-on');
+  closeNowPlaying();
+  renderGame();
+  try { if (await prepareGame()) hostRound(); }
+  catch (e) { const code = game?.code; const msg = e.message || String(e); if (game) { game.phase = 'lobby'; document.body.classList.remove('game-on'); } renderGame(msg); if (!code) abortGame(); }
+}
+function hostRound() {
+  if (!game) return;
+  if (game.i >= game.rounds || game.cursor >= game.tracks.length) return hostEnd();
+  drawRound();
+  game.answers = 0;
+  renderGame();
+  let lastPoll = 0;
+  playClip(game.answer, () => {
+    hostWrite(game.code, hostState({ opts: optLabels(game) })).catch(() => {});
+    renderGame();
+  }, async (left) => {
+    if (Date.now() - lastPoll < 1200 || game.polling) return;
+    lastPoll = Date.now(); game.polling = true;
+    try {
+      await refreshPlayers();
+      const all = Object.values(game.players);
+      game.answers = all.filter((p) => p.i === game.i && p.pick != null).length;
+      const el = $('#g-answers'); if (el) el.textContent = `${game.answers}/${all.length}`;
+      if (game.phase === 'play' && ((all.length && game.answers === all.length) || left <= -1.5)) hostReveal();
+    } catch (_) { if (left <= -4 && game.phase === 'play') hostReveal(); } finally { if (game) game.polling = false; }
+  }, () => clipFailed(hostRound));
+}
+function hostReveal() {
+  const g = game;
+  clearInterval(g.tick);
+  const right = g.options.indexOf(g.answer);
+  for (const p of Object.values(g.players)) {
+    const ok = p.i === g.i && p.pick === right;
+    if (ok) { p.streak = (p.streak || 0) + 1; p.last = pointsFor(1 - (p.ms || 0) / (g.cfg.time * 1000), p.streak); p.score = (p.score || 0) + p.last; }
+    else { p.streak = 0; p.last = 0; }
+    p.ok = ok;
+  }
+  g.played.push(g.answer);
+  g.phase = 'reveal';
+  hostWrite(g.code, hostState({ opts: optLabels(g), answer: right, reveal: { title: g.answer.title, artist: g.answer.artist || '', cover: /^https?:/.test(g.answer.cover || '') ? g.answer.cover : '' } })).catch(() => {});
+  g.i++;
+  renderGame();
+  g.nextT = setTimeout(hostRound, 6000);
+}
+function hostEnd() {
+  const g = game;
+  stopGameAudio();
+  g.phase = 'end';
+  document.body.classList.remove('game-on');
+  hostWrite(g.code, hostState()).catch(() => {});
+  renderGame();
+}
+
+/* ---------- Mode soirée : joueur ---------- */
+async function joinParty(codeRaw, name, team) {
+  const code = cleanCode(codeRaw);
+  if (code.length !== 5) throw new Error('Le code de la partie comporte 5 caractères.');
+  const st = await readParty(code);
+  if (!st) throw new Error('Aucune partie avec ce code. Vérifiez-le sur l\'écran de l\'hôte.');
+  const id = await myId();
+  const me = { id, name, team: st.cfg.teams ? team || 1 : 0 };
+  await playerWrite(code, id, { name: me.name, team: me.team });
+  game = { mode: 'guest', code, me, st, seenN: -1, picked: null };
+  const onState = (s) => {
+    if (!game || game.mode !== 'guest') return;
+    if (!s) { const m = 'La partie est terminée ou a été fermée par l\'hôte.'; clearInterval(game.poll); game = null; renderGame(m); return; }
+    if (s.n === game.st.n && game.seenN !== -1) return;
+    if (s.phase === 'play' && (game.st.phase !== 'play' || game.st.i !== s.i)) { game.t0 = Date.now(); game.picked = null; }
+    game.st = s; game.seenN = s.n;
+    renderGame();
+  };
+  onState(st);
+  game.poll = setInterval(async () => { try { onState(await readParty(code)); } catch (_) {} }, 1200);
+}
+async function guestPick(idx) {
+  const g = game;
+  if (!g || g.mode !== 'guest' || g.st.phase !== 'play' || g.picked != null) return;
+  g.picked = idx;
+  renderGame();
+  try { await playerWrite(g.code, g.me.id, { name: g.me.name, team: g.me.team, i: g.st.i, pick: idx, ms: Date.now() - g.t0 }); }
+  catch (e) { toast('Réponse non envoyée : ' + (e.message || e)); g.picked = null; renderGame(); }
+}
+
+/** Classement (joueurs, et équipes si la partie se joue en équipes : moyenne des points par joueur). */
+function boardHtml(board, cfg, meId = '', max = 12) {
+  if (!board.length) return '<p class="muted">Aucun joueur pour le moment.</p>';
+  let teams = '';
+  if (cfg.teams) {
+    const t = TEAMS.slice(0, cfg.teams).map(([n, c], k) => { const m = board.filter((p) => p.team === k + 1); return { n, c, size: m.length, score: m.length ? Math.round(m.reduce((a, p) => a + p.score, 0) / m.length) : 0 }; })
+      .filter((x) => x.size).sort((a, b) => b.score - a.score);
+    teams = `<div class="g-teams">${t.map((x, k) => `<div class="g-team" style="--tc:${x.c}"><span>${k + 1}</span><b>${x.n}</b><i>${x.score} pts · ${x.size} joueur(s)</i></div>`).join('')}</div>`;
+  }
+  return `${teams}<div class="g-board">${board.slice(0, max).map((p, k) => `<div class="g-line ${p.id === meId ? 'me' : ''}"><span class="g-pos">${k + 1}</span>${cfg.teams && p.team ? `<i class="g-dot" style="background:${TEAMS[p.team - 1][1]}"></i>` : ''}<b data-notr>${esc(p.name)}</b>${p.last ? `<em>+${p.last}</em>` : ''}<span class="g-sc">${p.score}</span></div>`).join('')}</div>`;
+}
+
 function renderGame(error = '') {
   if (current.name !== 'game') return;
   const best = gameBest();
-  if (!game || error) {
+  const cfg = game?.cfg || gameCfg();
+  /* ----- Accueil : catégorie, réglages, lancement ----- */
+  if (!game || error && (!game || game.phase !== 'lobby')) {
+    const row = (label, key, list) => `<div class="g-cfg"><span>${label}</span><div class="seg">${list.map(([v, l]) => `<button data-gc="${key}" data-gv="${v}" class="${String(cfg[key]) === String(v) ? 'active' : ''}">${l}</button>`).join('')}</div></div>`;
     view.innerHTML = `<div class="game">
       <div class="g-hero"><span class="g-tag">${ic('bolt', 'Blind test')}</span><h1>Tu reconnais le son ?</h1>
-        <p class="sub">Un extrait, quatre réponses, ${GAME_TIME} secondes. Plus tu réponds vite, plus ça rapporte. Trois bonnes réponses d'affilée : points doublés. Cinq : triplés.</p></div>
+        <p class="sub">Un extrait, plusieurs réponses, un chrono. Plus tu réponds vite, plus ça rapporte. Trois bonnes réponses d'affilée : points doublés. Cinq : triplés.</p></div>
       ${error ? `<div class="error">${esc(error)}</div>` : ''}
       <h2>Choisis ta catégorie</h2>
       <div class="chips catchips">${gamePools().map(([id, l]) => `<button class="chip ${gamePool === id ? 'active' : ''}" data-gp="${esc(id)}">${esc(l)}${best[id] ? ` <span class="g-best">${best[id]}</span>` : ''}</button>`).join('')}</div>
-      <button class="btn g-start" id="g-start">${ic('play', 'Lancer la partie')}</button>
-      <p class="muted small">${GAME_ROUNDS} extraits par partie${best[gamePool] ? ` · ton record en ${esc(poolName(gamePool))} : ${best[gamePool]} points` : ''}</p>
+      <h2>Réglages de la partie</h2>
+      <div class="g-cfgs">
+        ${row('Extraits', 'rounds', [[5, '5'], [10, '10'], [15, '15'], [20, '20']])}
+        ${row('Temps par extrait', 'time', [[10, '10 s'], [15, '15 s'], [20, '20 s'], [30, '30 s']])}
+        ${row('Réponses proposées', 'options', [[3, '3'], [4, '4'], [6, '6']])}
+        ${row('À deviner', 'guess', [['title', 'Le titre'], ['artist', 'L\'artiste']])}
+        ${row('Équipes (mode soirée)', 'teams', [[0, 'Chacun pour soi'], [2, '2 équipes'], [3, '3 équipes'], [4, '4 équipes']])}
+      </div>
+      <div class="g-modes">
+        <button class="btn g-start" id="g-start">${ic('play', 'Jouer seul')}</button>
+        <button class="btn g-start g-party" id="g-party">${ic('users', 'Mode soirée')}</button>
+      </div>
+      <p class="muted small">Mode soirée : cet appareil diffuse la musique et affiche un QR code ; chacun répond sur son téléphone.${best[gamePool] ? ` Ton record en ${esc(poolName(gamePool))} : ${best[gamePool]} points.` : ''}</p>
+      <h2>Rejoindre une partie</h2>
+      <form class="searchbar g-join" id="g-join">
+        <input id="gj-code" placeholder="Code (5 caractères)" maxlength="6" autocomplete="off" style="text-transform:uppercase" value="${esc(partyPrefill)}" />
+        <input id="gj-name" placeholder="Ton nom" maxlength="20" value="${esc(getProfileName() || ensureProfileName())}" />
+        <button class="btn ghost">Rejoindre</button></form>
     </div>`;
     view.querySelectorAll('[data-gp]').forEach((b) => (b.onclick = () => { gamePool = b.dataset.gp; renderGame(); }));
+    view.querySelectorAll('[data-gc]').forEach((b) => (b.onclick = () => { setGameCfg(b.dataset.gc, b.dataset.gc === 'guess' ? b.dataset.gv : +b.dataset.gv); renderGame(); }));
     $('#g-start').onclick = startGame;
+    $('#g-party').onclick = startParty;
+    $('#g-join').onsubmit = async (e) => {
+      e.preventDefault();
+      const name = cleanName($('#gj-name').value);
+      if (!name) { toast('Choisis un nom de 3 à 20 caractères.'); return; }
+      const btn = e.target.querySelector('button'); btn.disabled = true;
+      try { await joinParty($('#gj-code').value, name, 0); partyPrefill = ''; } catch (err) { btn.disabled = false; renderGame(err.message || String(err)); }
+    };
     return;
   }
   const g = game;
+
+  /* ----- Joueur d'une partie en soirée ----- */
+  if (g.mode === 'guest') {
+    const s = g.st;
+    const mine = (s.board || []).find((p) => p.id === g.me.id);
+    const rank = (s.board || []).findIndex((p) => p.id === g.me.id) + 1;
+    const head = `<div class="g-top"><span class="g-tag">${s.phase === 'lobby' ? 'Partie ' + esc(g.code) : `Manche ${Math.min(s.i + 1, s.rounds)}/${s.rounds}`}</span><span class="g-pts">${mine?.score || 0} pts</span><button class="btn ghost g-quit" id="g-quit">Quitter</button></div>`;
+    let body;
+    if (s.phase === 'lobby') {
+      body = `<div class="g-wait"><h1>Tu es dans la partie</h1><p class="muted">En attente du lancement par <b data-notr>${esc(s.host)}</b>. Garde cet écran ouvert.</p>
+        ${s.cfg.teams ? `<h2>Ton équipe</h2><div class="g-teampick">${TEAMS.slice(0, s.cfg.teams).map(([n, c], k) => `<button class="g-tbtn ${g.me.team === k + 1 ? 'on' : ''}" style="--tc:${c}" data-team="${k + 1}">${n}</button>`).join('')}</div>` : ''}
+        <h2>Joueurs</h2>${boardHtml(s.board || [], s.cfg, g.me.id, 40)}</div>`;
+    } else if (s.phase === 'play') {
+      body = g.picked != null
+        ? `<div class="g-wait"><div class="g-sent">${I.check}</div><h1>Réponse envoyée</h1><p class="muted">Résultat à la fin de l'extrait.</p></div>`
+        : `<p class="muted g-hint">${s.cfg.guess === 'artist' ? 'Qui chante ?' : 'Quel est ce titre ?'}</p><div class="g-opts big">${(s.opts || []).map((o, k) => `<button class="g-opt" data-pick="${k}"><b data-notr>${esc(o.t)}</b><span data-notr>${esc(o.a)}</span></button>`).join('')}</div>`;
+    } else if (s.phase === 'reveal') {
+      body = `<div class="g-wait"><div class="g-verdict static ${mine?.ok ? 'ok' : 'ko'}">${mine?.ok ? `+${mine.last}` : 'Raté'}</div>
+        <h1 data-notr>${esc(s.reveal?.title || '')}</h1><p class="muted" data-notr>${esc(s.reveal?.artist || '')}</p>
+        <p class="g-rank">${rank ? `${rank}<sup>e</sup> sur ${s.board.length}` : ''}</p>${boardHtml(s.board || [], s.cfg, g.me.id, 5)}</div>`;
+    } else if (s.phase === 'end') {
+      body = `<div class="g-wait"><span class="g-tag">Partie terminée</span><div class="g-score">${mine?.score || 0}</div><div class="muted">points</div><h1>${rank === 1 ? 'Victoire' : rank ? `${rank}<sup>e</sup> sur ${s.board.length}` : ''}</h1>${boardHtml(s.board || [], s.cfg, g.me.id, 40)}</div>`;
+    } else body = '<div class="g-wait"><div class="loader"></div><p class="muted">L\'extrait arrive…</p></div>';
+    view.innerHTML = `<div class="game g-round g-guest">${head}${body}</div>`;
+    $('#g-quit').onclick = () => { abortGame(); renderGame(); };
+    view.querySelectorAll('[data-pick]').forEach((b) => (b.onclick = () => guestPick(+b.dataset.pick)));
+    view.querySelectorAll('[data-team]').forEach((b) => (b.onclick = async () => { g.me.team = +b.dataset.team; renderGame(); try { await playerWrite(g.code, g.me.id, { name: g.me.name, team: g.me.team }); } catch (_) {} }));
+    return;
+  }
+
+  /* ----- Hôte : salle d'attente avec QR code ----- */
+  if (g.mode === 'host' && g.phase === 'lobby') {
+    let qr = '';
+    try { const q = qrcode(0, 'M'); q.addData(partyLink(g.code)); q.make(); qr = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); } catch (_) {}
+    const n = Object.keys(g.players).length;
+    view.innerHTML = `<div class="game g-lobby">
+      ${error ? `<div class="error">${esc(error)}</div>` : ''}
+      <div class="g-lobby-grid"><div class="qr g-qr">${qr}</div>
+        <div><span class="g-tag">${ic('users', 'Mode soirée')}</span><h1>Scannez pour jouer</h1>
+          <p class="muted">Chaque joueur scanne le QR code avec son téléphone, ou ouvre Enora → Jeu → « Rejoindre une partie » et saisit ce code :</p>
+          <div class="room-code">${esc(g.code)}</div>
+          <p class="muted small">${esc(poolName(g.pool))} · ${cfg.rounds} extraits · ${cfg.time} s · ${cfg.teams ? `${cfg.teams} équipes` : 'chacun pour soi'}</p></div></div>
+      <h2>${n} joueur(s)</h2>${boardHtml(partyBoard(), cfg, '', 60)}
+      <div class="g-actions"><button class="btn g-start" id="g-launch" ${n ? '' : 'disabled'}>${ic('play', 'Lancer la partie')}</button><button class="btn ghost" id="g-copy">Copier le lien</button><button class="btn ghost" id="g-quit">Annuler</button></div>
+    </div>`;
+    $('#g-launch').onclick = launchParty;
+    $('#g-copy').onclick = () => copyText(partyLink(g.code), 'Lien copié');
+    $('#g-quit').onclick = () => { abortGame(); renderGame(); };
+    return;
+  }
+
+  /* ----- Fin de partie ----- */
   if (g.phase === 'end') {
+    const solo = g.mode === 'solo';
     view.innerHTML = `<div class="game g-end">
       <span class="g-tag">${esc(poolName(g.pool))}</span>
-      <div class="g-score">${g.score}</div><div class="muted">points</div>
-      <h1>${gameRank(g)}</h1>
-      ${g.record ? '<div class="g-record">Nouveau record</div>' : ''}
-      <div class="stats"><div class="stat"><b>${g.good}/${g.rounds}</b><span>bonnes réponses</span></div><div class="stat"><b>${g.bestStreak}</b><span>meilleure série</span></div></div>
-      <div class="g-actions"><button class="btn" id="g-again">${ic('reload', 'Rejouer')}</button><button class="btn ghost" id="g-menu">Changer de catégorie</button>
-        <button class="btn ghost" id="g-share">${ic('share', 'Partager mon score')}</button><button class="btn ghost" id="g-save">Garder les titres en playlist</button></div>
+      ${solo ? `<div class="g-score">${g.score}</div><div class="muted">points</div><h1>${gameRank(g)}</h1>
+        ${g.record ? '<div class="g-record">Nouveau record</div>' : ''}
+        <div class="stats"><div class="stat"><b>${g.good}/${g.rounds}</b><span>bonnes réponses</span></div><div class="stat"><b>${g.bestStreak}</b><span>meilleure série</span></div></div>`
+        : `<h1>Classement final</h1>${boardHtml(partyBoard().map((p) => ({ ...p, last: 0 })), cfg, '', 60)}`}
+      <div class="g-actions"><button class="btn" id="g-again">${ic('reload', solo ? 'Rejouer' : 'Nouvelle partie, mêmes joueurs')}</button><button class="btn ghost" id="g-menu">${solo ? 'Changer de catégorie' : 'Terminer'}</button>
+        ${solo ? `<button class="btn ghost" id="g-share">${ic('share', 'Partager mon score')}</button>` : ''}<button class="btn ghost" id="g-save">Garder les titres en playlist</button></div>
       <h2>Les titres de la partie</h2>${(() => { rowTracks = []; return trackRows(g.played, { meta: true }); })()}
     </div>`;
-    $('#g-again').onclick = startGame;
-    $('#g-menu').onclick = () => { game = null; renderGame(); };
-    $('#g-share').onclick = () => {
+    $('#g-again').onclick = solo ? startGame : () => { g.phase = 'lobby'; hostWrite(g.code, hostState()).catch(() => {}); renderGame(); };
+    $('#g-menu').onclick = () => { abortGame(); renderGame(); };
+    const sh = $('#g-share');
+    if (sh) sh.onclick = () => {
       const text = `${getProfileName() || 'Moi'} : ${g.score} points au blind test Enora (${g.good}/${g.rounds}, ${poolName(g.pool)}). À toi de jouer : ${webAppUrl()}`;
       if (navigator.share) navigator.share({ text }).catch(() => {}); else copyText(text, 'Score copié : collez-le où vous voulez');
     };
@@ -905,25 +1143,30 @@ function renderGame(error = '') {
     };
     return;
   }
+
+  /* ----- Manche en cours (seul ou hôte) ----- */
   if (!g.options) { // préparation de la partie
     view.innerHTML = `<div class="game g-round"><div class="g-stage load"><svg class="g-ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/><circle class="run" cx="60" cy="60" r="52"/></svg></div><p class="muted g-hint">Préparation de la partie…</p></div>`;
     return;
   }
-  const mult = g.streak >= 5 ? 3 : g.streak >= 3 ? 2 : 1;
+  const host = g.mode === 'host';
+  const mult = host ? 1 : multOf(g.streak);
   const reveal = g.phase === 'reveal';
-  view.innerHTML = `<div class="game g-round">
-    <div class="g-top"><span class="g-tag">Manche ${Math.min(g.i + (reveal ? 0 : 1), g.rounds)}/${g.rounds}</span><span class="g-pts">${g.score} pts</span>${mult > 1 ? `<span class="g-combo">Série ×${mult}</span>` : ''}
+  const byArtist = cfg.guess === 'artist';
+  view.innerHTML = `<div class="game g-round ${host ? 'g-host' : ''}">
+    <div class="g-top"><span class="g-tag">Manche ${Math.min(g.i + (reveal ? 0 : 1), g.rounds)}/${g.rounds}</span>${host ? `<span class="g-pts">Réponses : <span id="g-answers">${g.answers || 0}/${Object.keys(g.players).length}</span></span>` : `<span class="g-pts">${g.score} pts</span>`}${mult > 1 ? `<span class="g-combo">Série ×${mult}</span>` : ''}
       <button class="btn ghost g-quit" id="g-quit">Quitter</button></div>
     <div class="g-stage ${g.phase}">
-      ${reveal ? `<img class="g-cover" src="${esc(g.answer.cover || FALLBACK_AUDIO)}" alt="" onerror="this.src='${FALLBACK_AUDIO}'"><div class="g-verdict ${g.ok ? 'ok' : 'ko'}">${g.ok ? `+${g.gained}` : g.picked ? 'Raté' : 'Temps écoulé'}</div>`
-        : `<svg class="g-ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/><circle class="run" cx="60" cy="60" r="52" style="animation-duration:${GAME_TIME}s"/></svg>
-           <div class="g-count" id="g-count">${g.phase === 'play' ? GAME_TIME : ''}</div><div class="g-bars"><i></i><i></i><i></i><i></i><i></i></div>`}
+      ${reveal ? `<img class="g-cover" src="${esc(g.answer.cover || FALLBACK_AUDIO)}" alt="" onerror="this.src='${FALLBACK_AUDIO}'">${host ? '' : `<div class="g-verdict ${g.ok ? 'ok' : 'ko'}">${g.ok ? `+${g.gained}` : g.picked ? 'Raté' : 'Temps écoulé'}</div>`}`
+        : `<svg class="g-ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/><circle class="run" cx="60" cy="60" r="52" style="animation-duration:${cfg.time}s"/></svg>
+           <div class="g-count" id="g-count">${g.phase === 'play' ? cfg.time : ''}</div><div class="g-bars"><i></i><i></i><i></i><i></i><i></i></div>`}
     </div>
-    <p class="muted g-hint">${g.phase === 'load' ? 'Chargement de l\'extrait…' : reveal ? '' : 'Quel est ce titre ?'}</p>
-    <div class="g-opts">${g.options.map((o) => `<button class="g-opt ${reveal ? (o.key === g.answer.key ? 'ok' : o.key === g.picked ? 'ko' : 'dim') : ''}" data-go="${esc(o.key)}" ${g.phase === 'play' ? '' : 'disabled'}><b>${esc(o.title)}</b><span>${esc(o.artist || '')}</span></button>`).join('')}</div>
+    <p class="muted g-hint">${g.phase === 'load' ? 'Chargement de l\'extrait…' : reveal ? (host ? `<b data-notr>${esc(g.answer.title)}</b> · <span data-notr>${esc(g.answer.artist || '')}</span>` : '') : host ? 'Répondez sur vos téléphones' : byArtist ? 'Qui chante ?' : 'Quel est ce titre ?'}</p>
+    <div class="g-opts n${g.options.length}">${g.options.map((o) => `<button class="g-opt ${reveal ? (o.key === g.answer.key ? 'ok' : o.key === g.picked ? 'ko' : 'dim') : ''}" data-go="${esc(o.key)}" ${g.phase === 'play' && !host ? '' : 'disabled'}><b data-notr>${esc(byArtist ? o.artist || '—' : o.title)}</b><span data-notr>${esc(byArtist ? '' : o.artist || '')}</span></button>`).join('')}</div>
+    ${host && reveal ? `<h2>Classement</h2>${boardHtml(partyBoard(), cfg, '', 8)}` : ''}
   </div>`;
   $('#g-quit').onclick = () => { abortGame(); renderGame(); };
-  view.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => answerGame(b.dataset.go)));
+  if (!host) view.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => answerGame(b.dataset.go)));
 }
 
 async function viewGame() { renderGame(); }
@@ -1024,6 +1267,14 @@ function openImportModal(prefill = '') {
 
 /** Lien de partage ouvert dans la version web : …/#pl=CODE */
 async function importFromHash() {
+  // Lien ou QR code d'une partie de blind test : …/#party=CODE
+  const pm = location.hash.match(/[#&]party=([A-Za-z0-9]{5})/);
+  if (pm) {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+    partyPrefill = pm[1].toUpperCase();
+    go('game');
+    return;
+  }
   const m = location.hash.match(/[#&]pl=([zj][A-Za-z0-9_-]+)/);
   if (!m) return;
   try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
@@ -1090,21 +1341,26 @@ function openTrackInfo(t) {
 /* =========================================================================
    Rétrospective : bilan d'écoute en image
    ========================================================================= */
-function openRecap(period = 'month') {
+function openRecap(period = 'month', mode = 'recap') {
   const r = recap(period);
-  const canvas = drawRecap(r, tr);
-  const c = modal(`<h3>Ma rétrospective</h3>
+  const prof = mode === 'cloud' ? musicProfile(period, getHistory(), tr) : null;
+  const canvas = mode === 'cloud' ? drawCloud(prof, tr) : drawRecap(r, tr);
+  const c = modal(`<h3>${mode === 'cloud' ? 'Mon nuage musical' : 'Ma rétrospective'}</h3>
+    <div class="seg" style="margin-bottom:8px"><button data-rm="recap" class="${mode === 'recap' ? 'active' : ''}">Bilan</button><button data-rm="cloud" class="${mode === 'cloud' ? 'active' : ''}">Nuage de mots</button></div>
     <div class="seg" style="margin-bottom:12px">${[['month', 'Ce mois-ci'], ['year', 'Cette année'], ['all', 'Depuis le début']].map(([k, l]) => `<button data-rp="${k}" class="${k === period ? 'active' : ''}">${l}</button>`).join('')}</div>
-    <div class="recap-wrap" id="recap-wrap"></div>
+    <div class="recap-wrap ${mode}" id="recap-wrap"></div>
+    ${prof?.headline ? `<p class="cloud-head" data-notr>${esc(prof.headline)}</p>` : ''}
+    ${mode === 'cloud' ? '<p class="muted small">Votre humeur musicale, déduite sur cet appareil de vos styles, de leur rythme, de vos heures et de votre temps d\'écoute.</p>' : ''}
     ${r.listens ? '' : '<p class="muted small">Pas encore d\'écoute sur cette période.</p>'}
     <div class="modal-actions"><button class="btn ghost" id="rc-close">Fermer</button>${navigator.canShare ? '<button class="btn ghost" id="rc-share">Partager…</button>' : ''}<button class="btn" id="rc-save">Enregistrer l'image</button></div>`);
   c.classList.add('recap-card');
   $('#recap-wrap', c).appendChild(canvas);
-  c.querySelectorAll('[data-rp]').forEach((b) => (b.onclick = () => openRecap(b.dataset.rp)));
+  c.querySelectorAll('[data-rp]').forEach((b) => (b.onclick = () => openRecap(b.dataset.rp, mode)));
+  c.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => openRecap(period, b.dataset.rm)));
   const done = () => { c.classList.remove('recap-card'); closeModal(); };
   $('#rc-close', c).onclick = done;
   const blob = () => new Promise((res) => canvas.toBlob(res, 'image/png'));
-  const name = `Enora-retrospective-${period}.png`;
+  const name = `Enora-${mode === 'cloud' ? 'nuage' : 'retrospective'}-${period}.png`;
   $('#rc-save', c).onclick = async () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(await blob()); a.download = name;
@@ -1115,7 +1371,7 @@ function openRecap(period = 'month') {
   const sh = $('#rc-share', c);
   if (sh) sh.onclick = async () => {
     const file = new File([await blob()], name, { type: 'image/png' });
-    if (navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: 'Ma rétrospective Enora' }).catch(() => {}); else $('#rc-save', c).click();
+    if (navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: 'Enora' }).catch(() => {}); else $('#rc-save', c).click();
   };
 }
 
@@ -2213,7 +2469,11 @@ function viewSettings() {
       <div class="set-row">Thème</div>
       ${opts('theme', [['auto', 'Automatique', 'Suit le réglage de l\'appareil'], ['dark', 'Sombre', ''], ['light', 'Clair', '']])}
       <div class="set-row">Langue</div>
-      ${opts('lang', [['auto', 'Automatique', 'Langue de l\'appareil'], ['fr', 'Français', ''], ['en', 'English', '']])}
+      <select id="set-lang" class="set-input" style="max-width:340px">
+        <option value="auto" ${st.lang === 'auto' ? 'selected' : ''}>Automatique (langue de l'appareil)</option>
+        ${LANGS.map(([c, n]) => `<option value="${c}" ${st.lang === c ? 'selected' : ''} data-notr>${n}</option>`).join('')}
+      </select>
+      <p class="muted small" style="margin-top:8px">Dix langues. Les traductions peuvent être améliorées par tous : voir les fichiers i18n du projet.</p>
     </div>
 
     <div class="set-block"><h3>Lecture</h3>
@@ -2314,6 +2574,7 @@ function viewSettings() {
   view.querySelectorAll('.set-block').forEach((b) => { b.classList.toggle('hidden', (SETTINGS_BLOCKS[b.querySelector('h3')?.textContent.trim()] || 'data') !== settingsTab); });
   view.querySelectorAll('[data-stab]').forEach((b) => (b.onclick = () => { settingsTab = b.dataset.stab; render(); }));
   $('#open-yt').onclick = () => go('youtube');
+  $('#set-lang').onchange = (e) => { setSetting('lang', e.target.value); cloud.touch(); applyEffects(); render(true); };
   $('#bk-export').onclick = exportBackup;
   $('#bk-import').onclick = () => $('#bk-file').click();
   $('#bk-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importBackup(f); };
@@ -2352,8 +2613,13 @@ function viewSettings() {
 function viewAbout() {
   const repo = BUILD.repo || 'Geld237/sonora';
   view.innerHTML = `
-    <div class="about-hero"><span class="logo">${I.note}</span>
+    <div class="about-hero"><span class="logo">${I.logo}</span>
       <div><h1>Enora</h1><div class="muted">Version ${esc(currentVersion())} · Musique, films et radio, sans publicité</div></div>
+    </div>
+
+    <div class="set-block about-block"><h3>D'où vient le nom Enora ?</h3>
+      <p>Enora est un prénom breton. C'est la forme bretonne d'Honora, du latin « honor » : l'honneur. Il a été porté par sainte Enora, au VIe siècle, épouse de saint Efflam, présente dans les récits et les chants traditionnels de Bretagne.</p>
+      <p>Le nom a été choisi pour sa sonorité claire et musicale, et pour ce qu'il dit du projet : faire honneur à la musique et à celles et ceux qui la créent. Le logo reprend son initiale, un « e » dessiné comme un disque qui tourne.</p>
     </div>
 
     <div class="set-block about-block"><h3>Pourquoi Enora ?</h3>
@@ -2791,6 +3057,7 @@ document.addEventListener('drop', (e) => {
 // Icônes de la barre d'onglets et du lecteur
 document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = I[el.dataset.icon] || ''; });
 document.body.classList.add('no-mini', `platform-${platform}`);
+if (window.sonora?.frameless) document.body.classList.add('frameless', `os-${window.sonora.os}`);
 if (isStoreBuild) document.body.classList.add('store-build');
 startUpdateChecks();
 const lightQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
@@ -2799,6 +3066,7 @@ function applyTheme() {
   const light = t === 'light' || (t === 'auto' && !!lightQuery?.matches);
   document.documentElement.dataset.theme = light ? 'light' : 'dark';
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f5f5f7' : '#000000');
+  window.sonora?.setTheme?.(light);
 }
 if (lightQuery) (lightQuery.addEventListener ? lightQuery.addEventListener('change', applyTheme) : lightQuery.addListener(applyTheme));
 function applyEffects() {
