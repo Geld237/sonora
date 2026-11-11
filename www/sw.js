@@ -4,7 +4,7 @@ const VERSION = 'sonora-__BUILD__';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css', 'css/fonts.css', 'fonts/inter-latin-wght-normal.woff2', 'fonts/inter-latin-ext-wght-normal.woff2', 'js/icons.js',
   'js/app.js', 'js/api.js', 'js/db.js', 'js/player.js', 'js/platform.js', 'js/youtube-player.js',
-  'js/settings.js', 'js/cloud.js', 'js/cloud-config.js', 'js/build-info.js', 'js/updates.js',
+  'js/settings.js', 'js/net.js', 'js/lyrics.js', 'js/podcasts.js', 'js/share.js', 'js/recap.js', 'js/rooms.js', 'js/i18n.js', 'js/i18n-en.js', 'js/qrcode.js', 'js/cloud.js', 'js/cloud-config.js', 'js/build-info.js', 'js/updates.js',
   'icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 

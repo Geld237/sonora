@@ -5,6 +5,7 @@ import { ytMedia } from './youtube-player.js';
 const audio = document.getElementById('audio-el');
 const video = document.getElementById('video-el');
 const audioFx = document.getElementById('audio-fx'); // fichiers locaux / hors ligne : égaliseur + normalisation
+const audioFx2 = document.getElementById('audio-fx2'); // second lecteur local : sert au fondu enchaîné
 
 /* ---------- Égaliseur et normalisation du volume (Web Audio) ----------
    Uniquement pour les fichiers stockés sur l'appareil : le navigateur interdit de traiter
@@ -26,6 +27,7 @@ function ensureFx() {
   try {
     fx.ctx = new AC();
     const src = fx.ctx.createMediaElementSource(audioFx);
+    const src2 = audioFx2 ? fx.ctx.createMediaElementSource(audioFx2) : null;
     fx.filters = EQ_BANDS.map((f, i) => {
       const b = fx.ctx.createBiquadFilter();
       b.type = i === 0 ? 'lowshelf' : i === EQ_BANDS.length - 1 ? 'highshelf' : 'peaking';
@@ -36,6 +38,7 @@ function ensureFx() {
     fx.comp = fx.ctx.createDynamicsCompressor();
     fx.gain = fx.ctx.createGain();
     let node = src;
+    if (src2) src2.connect(fx.filters[0]);
     for (const f of fx.filters) { node.connect(f); node = f; }
     node.connect(fx.comp);
     fx.comp.connect(fx.gain);
@@ -59,6 +62,8 @@ export function setAudioEffects({ preset, normalize }) {
   applyFx();
 }
 
+const ELEMENTS = [audio, audioFx, audioFx2, video, ytMedia].filter(Boolean);
+
 class Player extends EventTarget {
   constructor() {
     super();
@@ -71,8 +76,11 @@ class Player extends EventTarget {
     this.sleepTimer = null;
     this.sleepAtEnd = false;
     this.offlineIndex = new Map(); // clé source -> id du média hors-ligne
-    for (const el of [audio, audioFx, video, ytMedia]) {
-      el.addEventListener('timeupdate', () => el === this.el && this.emit('time'));
+    this.volume = 1;
+    this.crossfade = 0;            // secondes de fondu enchaîné entre deux fichiers de l'appareil (0 = désactivé)
+    this.xf = null;                // fondu en cours
+    for (const el of ELEMENTS) {
+      el.addEventListener('timeupdate', () => { if (el === this.el) { this.emit('time'); this.maybeCrossfade(); } });
       el.addEventListener('durationchange', () => el === this.el && this.emit('time'));
       el.addEventListener('play', () => el === this.el && this.emit('state'));
       el.addEventListener('pause', () => el === this.el && this.emit('state'));
@@ -106,6 +114,7 @@ class Player extends EventTarget {
   async load(autoplay = true) {
     const t = this.current;
     if (!t) return;
+    this.cancelCrossfade();
     if (this.objectUrl) { URL.revokeObjectURL(this.objectUrl); this.objectUrl = null; }
     let src = t.kind === 'youtube' ? t.ytId : t.src;
     const offlineId = t.kind !== 'youtube' && (t.mediaId || this.offlineIndex.get(t.key));
@@ -117,12 +126,13 @@ class Player extends EventTarget {
     const local = t.kind === 'audio' && !!this.objectUrl && ensureFx();
     if (local && fx.ctx.state === 'suspended') fx.ctx.resume().catch(() => {});
     const next = t.kind === 'youtube' ? ytMedia : t.kind === 'video' ? video : local ? audioFx : audio;
-    for (const other of [audio, audioFx, video, ytMedia]) {
+    for (const other of ELEMENTS) {
       if (other === next) continue;
       other.pause();
       if (other.src) { other.removeAttribute('src'); other.load(); }
     }
     this.el = next;
+    this.el.volume = this.volume;
     if (!src) { this.el.pause(); this.emit('change'); this.onError(); return; }
     this.el.src = src;
     this.el.preload = 'auto';
@@ -151,10 +161,72 @@ class Player extends EventTarget {
     } else {
       this.el.pause();
       this.emit('state');
+      this.emit('queueend'); // fin de la file d'attente (lecture continue : radio du dernier titre)
       return;
     }
     this.load(true);
   }
+
+  /* ---------- Fondu enchaîné (fichiers de l'appareil) ---------- */
+  /** Index du titre suivant en lecture automatique, ou -1 s'il n'y en a pas. */
+  peekNext() {
+    const n = this.queue.length;
+    if (n < 2) return -1;
+    if (this.shuffle) return (this.index + 1 + Math.floor(Math.random() * (n - 1))) % n;
+    if (this.index < n - 1) return this.index + 1;
+    return this.repeat === 'all' ? 0 : -1;
+  }
+
+  maybeCrossfade() {
+    const sec = this.crossfade;
+    const el = this.el;
+    if (!sec || this.xf || !audioFx2 || (el !== audioFx && el !== audioFx2) || this.repeat === 'one' || this.sleepAtEnd) return;
+    const rem = el.duration - el.currentTime;
+    if (!(rem > 0.3 && rem <= sec) || !(el.duration > sec * 3) || el.paused) return;
+    const ni = this.peekNext();
+    const nt = this.queue[ni];
+    const id = nt && nt.kind === 'audio' && (nt.mediaId || this.offlineIndex.get(nt.key));
+    if (!id) return;
+    const tok = (this.xf = { pending: true });
+    this.startCrossfade(el, ni, id, rem, tok).catch(() => { if (this.xf === tok) this.xf = null; });
+  }
+
+  async startCrossfade(from, ni, id, rem, tok) {
+    const rec = await db.get('blobs', id).catch(() => null);
+    if (this.xf !== tok) return;
+    if (!rec?.blob || this.el !== from || from.paused) { this.xf = null; return; }
+    const to = from === audioFx ? audioFx2 : audioFx;
+    const url = URL.createObjectURL(rec.blob);
+    to.src = url;
+    to.volume = 0;
+    try { await to.play(); } catch (_) { URL.revokeObjectURL(url); this.xf = null; return; }
+    if (this.xf !== tok || this.el !== from) { to.pause(); to.removeAttribute('src'); URL.revokeObjectURL(url); if (this.xf === tok) this.xf = null; return; }
+    // Le titre suivant devient le titre en cours ; l'ancien finit de s'éteindre
+    const oldUrl = this.objectUrl;
+    this.objectUrl = url;
+    this.el = to;
+    this.index = ni;
+    const dur = Math.max(0.5, Math.min(rem, this.crossfade)) * 1000;
+    const t0 = performance.now();
+    const done = () => {
+      clearInterval(this.xf?.timer);
+      from.pause(); from.removeAttribute('src'); from.load();
+      if (oldUrl) URL.revokeObjectURL(oldUrl);
+      to.volume = this.volume;
+      this.xf = null;
+    };
+    this.xf = { done, timer: setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / dur);
+      from.volume = this.volume * (1 - k);
+      to.volume = this.volume * k;
+      if (k >= 1) done();
+    }, 80) };
+    this.emit('change');
+    this.updateMediaSession();
+    this.emit('state');
+  }
+
+  cancelCrossfade() { if (this.xf?.done) this.xf.done(); this.xf = null; }
 
   prev() {
     if (!this.queue.length) return;
@@ -170,7 +242,7 @@ class Player extends EventTarget {
     if (isFinite(d) && d > 0) this.el.currentTime = fraction * d;
   }
 
-  setVolume(v) { audio.volume = v; audioFx.volume = v; video.volume = v; ytMedia.volume = v; }
+  setVolume(v) { this.volume = v; if (!this.xf) for (const el of ELEMENTS) el.volume = v; }
 
   toggleShuffle() { this.shuffle = !this.shuffle; this.emit('change'); }
   cycleRepeat() { this.repeat = { off: 'all', all: 'one', one: 'off' }[this.repeat]; this.emit('change'); }

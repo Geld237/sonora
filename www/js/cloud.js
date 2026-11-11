@@ -145,6 +145,21 @@ async function writeRemote(data) {
   }
 }
 
+/** Requête authentifiée vers un autre document Firestore (salons d'écoute à plusieurs). */
+export async function authFetch(path, { method = 'GET', body = null } = {}) {
+  const s = await token();
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(getConfig().projectId)}/databases/(default)/documents/${path}`;
+  const res = await fetch(url, { method, headers: { Authorization: `Bearer ${s.idToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const e = niceError(d?.error?.status, d?.error?.message || `HTTP ${res.status}`);
+    e.status = res.status;
+    e.code = d?.error?.status || '';
+    throw e;
+  }
+  return d;
+}
+
 /* ---------- Suppressions (pour qu'un élément supprimé sur un appareil le soit partout) ---------- */
 export function markDeleted(collection, id) {
   const t = ls.get(TOMB_KEY, {}) || {};

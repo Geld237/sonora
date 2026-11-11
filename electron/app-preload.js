@@ -9,6 +9,9 @@ if (process.isMainFrame) {
     http: (req) => ipcRenderer.invoke('sonora:http', req),
     // Page de résultats YouTube chargée dans une fenêtre invisible (recherche la plus fiable)
     ytPage: (url) => ipcRenderer.invoke('sonora:ytpage', url),
+    // Mini-lecteur flottant et touches multimédia du clavier
+    setMini: (on) => ipcRenderer.invoke('sonora:mini', !!on),
+    onMedia: (fn) => ipcRenderer.on('sonora:media', (_e, action) => fn(action)),
     // Mises à jour automatiques
     appInfo: () => ipcRenderer.invoke('sonora:app-info'),
     checkUpdate: () => ipcRenderer.invoke('sonora:update-check'),

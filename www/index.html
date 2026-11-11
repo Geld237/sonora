@@ -8,7 +8,7 @@
   <!-- Version web installable (PWA) -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#0e0f14" />
-  <meta name="description" content="Enora : musique par pays et par style, films, radios du monde entier, favoris et playlists synchronisés." />
+  <meta name="description" content="Enora : musique par style, films, radios du monde entier, favoris et playlists synchronisés." />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -25,7 +25,7 @@
       <button class="nav-item active" data-view="library"><span class="ico" data-icon="library"></span><span>Bibliothèque</span></button>
       <button class="nav-item" data-view="music"><span class="ico" data-icon="music"></span><span>Musique</span></button>
       <button class="nav-item" data-view="films" title="Films, séries et TV en direct"><span class="ico" data-icon="film"></span><span>Films &amp; TV</span></button>
-      <button class="nav-item" data-view="radio"><span class="ico" data-icon="radio"></span><span>Radio</span></button>
+      <button class="nav-item" data-view="radio" title="Radios et podcasts"><span class="ico" data-icon="radio"></span><span>Radio</span></button>
       <button class="nav-item" data-view="youtube"><span class="ico" data-icon="youtube"></span><span>YouTube</span></button>
       <button class="nav-item" data-view="about"><span class="ico" data-icon="info"></span><span>Infos</span></button>
       <button class="nav-item" data-view="settings"><span class="ico" data-icon="settings"></span><span>Réglages</span></button>
@@ -59,6 +59,7 @@
         <div class="mini-extra">
           <span id="mini-time" class="muted small">0:00 / 0:00</span>
           <input id="mini-vol" type="range" min="0" max="1" step="0.01" value="1" title="Volume" />
+          <button id="mini-compact" class="icon-btn hidden" title="Mini-lecteur flottant" data-icon="pip"></button>
         </div>
       </div>
     </footer>
@@ -96,6 +97,8 @@
       <div class="np-tools">
         <button id="np-fav" class="pill">Favori</button>
         <button id="np-addpl" class="pill">Ajouter à une playlist</button>
+        <button id="np-radio" class="pill">Radio du titre</button>
+        <button id="np-room" class="pill">Écouter à plusieurs</button>
         <select id="np-sleep" class="pill" title="Minuterie de sommeil">
           <option value="0">Minuterie : désactivée</option>
           <option value="15">Arrêt dans 15 min</option>
@@ -119,6 +122,8 @@
   <audio id="audio-el" preload="none"></audio>
   <!-- Fichiers sur l'appareil : passent par l'égaliseur (Web Audio) -->
   <audio id="audio-fx" preload="none"></audio>
+  <audio id="audio-fx2" preload="none"></audio>
+  <input id="list-input" type="file" accept=".txt,.csv,.tsv,text/plain,text/csv" class="hidden" />
   <input id="lrc-input" type="file" accept=".lrc,.txt,text/plain" class="hidden" />
   <input id="file-input" type="file" multiple class="hidden"
     accept="audio/*,video/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.mp4,.m4v,.mov,.webm" />

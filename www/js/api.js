@@ -2,7 +2,7 @@
 //  - Internet Archive (archive.org) : musique libre (netlabels) et films du domaine public
 //  - Radio Browser (radio-browser.info) : plus de 40 000 radios du monde entier
 
-import { getSettings, markSettingsChanged } from './settings.js';
+import { getSettings, dataSaverActive, markSettingsChanged } from './settings.js';
 import { BUILD } from './build-info.js';
 
 const IA = 'https://archive.org';
@@ -119,7 +119,8 @@ function groupAudioFiles(files) {
 
 /** Détails d'un album : liste des pistes, avec la qualité choisie dans les réglages. */
 export async function iaAlbum(id) {
-  const { streamQuality, downloadQuality } = getSettings();
+  const { downloadQuality } = getSettings();
+  const streamQuality = dataSaverActive() ? 'low' : getSettings().streamQuality; // réseau mobile : qualité légère
   const m = await fetchJSON(`${IA}/metadata/${encodeURIComponent(id)}`);
   const meta = m.metadata || {};
   const groups = groupAudioFiles(m.files || []);
@@ -674,6 +675,41 @@ export async function ytCategory(cat, subs = []) {
   const year = new Date().getFullYear();
   const queries = [`${cat} ${year} hits`, ...subs.slice(0, 5).map((g) => `${g} ${year}`)];
   return multiSearch(`cat.${cat}`, queries, { region: 'WW', recent: false, order: 'viewCount' });
+}
+
+/** « Pour vous » : nouveautés et meilleurs titres des artistes et styles les plus écoutés. */
+export async function ytForYou(artists = [], styles = []) {
+  const year = new Date().getFullYear();
+  const queries = [...artists.slice(0, 5).map((a) => `${a} ${year}`), ...styles.slice(0, 2).map((g) => `${g} ${year} nouveautés`), ...artists.slice(0, 2).map((a) => `${a} best of`)];
+  if (!queries.length) return [];
+  let h = 0;
+  for (const c of queries.join('|')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const list = await multiSearch(`foryou.${h.toString(36)}`, queries, { region: 'WW', recent: false });
+  // Mélange stable par jour : la page change d'un jour à l'autre sans bouger à chaque ouverture
+  const seed = new Date().getDate();
+  return list.map((t, i) => [t, (i * 7919 + seed * 104729) % 97 + i * 0.6]).sort((x, y) => x[1] - y[1]).map((x) => x[0]);
+}
+
+/** Radio d'un titre : titres proches (même artiste, même style). */
+export async function ytRadio(track, style = '') {
+  const artist = track.artist && !/^(youtube|inconnu|artiste inconnu|vidéo locale)$/i.test(track.artist) ? track.artist : '';
+  const queries = [artist ? `${artist} mix` : `${track.title} mix`, artist ? `${artist} ${style || 'best songs'}` : `${track.title}`, style ? `${style} ${new Date().getFullYear()}` : `${track.title} ${artist} similar songs`]
+    .map((q) => q.replace(/\s+/g, ' ').trim());
+  const list = await multiSearch(`radio.${track.key}`, [...new Set(queries)], { region: 'WW', recent: false });
+  const out = list.filter((t) => t.key !== track.key && (t.duration || 0) < 900); // pas de compilations d'une heure
+  // On alterne les artistes pour éviter dix titres identiques d'affilée
+  const seen = new Map();
+  return out.map((t, i) => { const n = seen.get(t.artist) || 0; seen.set(t.artist, n + 1); return [t, i + n * 4]; }).sort((x, y) => x[1] - y[1]).map((x) => x[0]).slice(0, 40);
+}
+
+/** Premier résultat pour « artiste titre » (import d'une liste de titres). */
+export async function ytFindOne(q) {
+  const key = getYtApiKey();
+  let l = [];
+  if (!isWebApp()) { try { l = await innertubeSearch(q, { region: 'FR' }); } catch (_) {} }
+  if (!l.length && key) l = await apiSearchOnce(q, { region: 'FR', category: true }, key);
+  if (!l.length && isWebApp() && !key) throw new Error('Version web : ajoutez une clé API YouTube (Réglages → YouTube).');
+  return l.find((t) => (t.duration || 0) < 900) || l[0] || null;
 }
 
 /** Recherche libre (titre, artiste…). */

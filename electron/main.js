@@ -1,5 +1,5 @@
 // Enora — version Windows (Electron)
-const { app, BrowserWindow, session, protocol, net, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, session, protocol, net, shell, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -89,6 +89,39 @@ protocol.registerSchemesAsPrivileged([
 // YouTube doit voir un navigateur Chrome classique
 app.userAgentFallback = app.userAgentFallback.replace(/\s?Electron\/\S+/i, '').replace(/\s?sonora\/\S+/i, '');
 
+// Windows / Linux : les touches multimédia du clavier sont gérées par l'application (fiable aussi avec le lecteur YouTube).
+// Sur Mac, le système les transmet déjà à l'application.
+const OWN_MEDIA_KEYS = process.platform !== 'darwin';
+if (OWN_MEDIA_KEYS) app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling');
+let mainWin = null;
+function registerMediaKeys() {
+  if (!OWN_MEDIA_KEYS) return;
+  const send = (action) => () => { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('sonora:media', action); };
+  for (const [key, action] of [['MediaPlayPause', 'toggle'], ['MediaNextTrack', 'next'], ['MediaPreviousTrack', 'prev']]) {
+    try { globalShortcut.register(key, send(action)); } catch (_) {}
+  }
+}
+app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (_) {} });
+
+// Mini-lecteur flottant : la fenêtre devient petite et reste au-dessus des autres
+let fullBounds = null;
+ipcMain.handle('sonora:mini', (_e, on) => {
+  const win = mainWin;
+  if (!win || win.isDestroyed()) return;
+  if (on) {
+    if (win.isFullScreen()) win.setFullScreen(false);
+    if (win.isMaximized()) win.unmaximize();
+    fullBounds = win.getBounds();
+    win.setMinimumSize(340, 96);
+    win.setSize(440, 104);
+    win.setAlwaysOnTop(true, 'floating');
+  } else {
+    win.setAlwaysOnTop(false);
+    win.setMinimumSize(380, 600);
+    if (fullBounds) win.setBounds(fullBounds); else win.setSize(1280, 820);
+  }
+});
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -109,6 +142,7 @@ function createWindow() {
       autoplayPolicy: 'no-user-gesture-required',
     },
   });
+  mainWin = win;
   win.loadURL('app://sonora/index.html');
   setupAutoUpdate(win);
   // Les liens externes s'ouvrent dans le navigateur
@@ -254,6 +288,7 @@ app.whenReady().then(() => {
   }
 
   createWindow();
+  registerMediaKeys();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 

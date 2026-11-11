@@ -4,3 +4,6 @@ Copyright (c) 2026 Geld237 — code sous licence MIT (voir LICENSE).
 Composants tiers :
 - Police Inter (www/fonts) : SIL Open Font License 1.1, voir www/fonts/LICENSE-Inter-OFL.txt
 - Electron, Capacitor et les autres dépendances npm : sous leurs propres licences (voir node_modules)
+- qrcode-generator de Kazuhiko Arase (www/js/qrcode.js) : licence MIT. « QR Code » est une marque déposée de DENSO WAVE INCORPORATED.
+
+Services ouverts utilisés : LRCLIB (paroles), annuaire de podcasts d'Apple et flux RSS des émissions, Radio Browser, Internet Archive.

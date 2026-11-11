@@ -21,6 +21,19 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.5.0
+- **Paroles automatiques** : affichées et synchronisées toutes seules quand elles existent ([LRCLIB](https://lrclib.net), base ouverte).
+- **Pour vous** : suggestions calculées sur l'appareil à partir de l'historique et des favoris (aucun serveur, aucune collecte).
+- **Radio d'un titre** et **lecture continue** : des titres proches s'enchaînent à la fin d'une liste.
+- **Écoute à plusieurs** : un code de salon, tout le monde entend le même titre au même moment (compte Enora nécessaire, voir la règle Firestore plus bas).
+- **Partage de playlist** par lien ou QR code, et **import** d'une liste de titres (texte ou CSV exporté d'un autre service).
+- **Rétrospective** : bilan du mois ou de l'année en image à partager.
+- **Podcasts** (onglet Radio) : recherche, abonnements, téléchargement hors-ligne, reprise là où l'on s'était arrêté.
+- **Ordinateur** : mini-lecteur flottant et touches multimédia du clavier.
+- **Économie de données**, **fondu enchaîné** (fichiers de l'appareil), **thème clair / sombre automatique**, **version anglaise** (Réglages → Apparence et langue).
+
+Pour compléter la traduction anglaise : `www/js/i18n-en.js` (une ligne par phrase).
+
 ## Nouveautés 1.3.0 (inspirées du [benchmark](docs/BENCHMARK.md))
 - **Paroles synchronisées** : importez `Titre.mp3` et `Titre.lrc` ensemble, ou ajoutez le `.lrc` depuis le lecteur.
 - **Égaliseur** (6 préréglages) et **normalisation du volume** pour vos fichiers.
@@ -169,6 +182,10 @@ Le compte permet de retrouver sur l'ordinateur, Android et l'iPhone les **favori
      match /databases/{database}/documents {
        match /users/{userId} {
          allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+       // Écoute à plusieurs : les salons sont lisibles et modifiables par les utilisateurs connectés
+       match /rooms/{room} {
+         allow read, write: if request.auth != null;
        }
      }
    }
