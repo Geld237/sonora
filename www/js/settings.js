@@ -12,6 +12,8 @@ const DEFAULTS = {
   lang: 'auto',              // auto | fr | en
   autoRadio: 'on',           // lecture continue : radio du dernier titre à la fin de la file d'attente
   autoLyrics: 'on',          // paroles automatiques (LRCLIB)
+  lyricsShow: 'on',          // paroles affichées dans le lecteur : on | off
+  lyricsPos: 'side',         // sur grand écran : à droite du lecteur (side) ou en dessous (below)
   showMixes: 'off',          // compilations et mix dans les listes de musique : on | off
 };
 

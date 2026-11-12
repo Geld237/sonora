@@ -195,6 +195,19 @@ export const EN = {
   'Sur Android : installez': 'On Android: install', 'Sur ordinateur : installez': 'On a computer: install', 'l\'application Enora': 'the Enora app',
   '(bloqueur intégré), ou ouvrez ce site dans Firefox avec l\'extension uBlock Origin.': '(built-in blocker), or open this site in Firefox with the uBlock Origin extension.',
   '(bloqueur intégré), ou ajoutez l\'extension uBlock Origin à votre navigateur.': '(built-in blocker), or add the uBlock Origin extension to your browser.',
+  // 1.10 : salons, paroles, jeu à distance
+  'Son (mode soirée)': 'Sound (party mode)', 'Sur cet appareil': 'On this device', 'Sur chaque téléphone (à distance)': 'On each phone (remote)', 'Toucher pour écouter l\'extrait': 'Tap to hear the clip',
+  'Cet extrait ne peut être écouté que sur l\'appareil de l\'hôte.': 'This clip can only be heard on the host\'s device.',
+  'Paroles affichées': 'Lyrics shown', 'Paroles masquées': 'Lyrics hidden', 'Paroles en plein écran': 'Full-screen lyrics', 'Quitter le plein écran': 'Exit full screen',
+  'Afficher les paroles sous le lecteur': 'Show lyrics below the player', 'Afficher les paroles à droite du lecteur': 'Show lyrics to the right of the player',
+  'Ce que les invités peuvent faire': 'What guests can do', 'Écouter': 'Listen', 'L\'hôte choisit tout': 'The host picks everything', 'Les invités ajoutent des titres à la file': 'Guests add tracks to the queue',
+  'Choisir la suite': 'Pick what\'s next', 'Ils ajoutent des titres et choisissent le prochain': 'They add tracks and choose the next one', 'DJ': 'DJ', 'Ils lancent un titre, mettent en pause et passent au suivant': 'They start a track, pause and skip',
+  'À suivre dans le salon': 'Up next in the room', 'Ajouté à la file du salon': 'Added to the room queue', 'Sera joué ensuite dans le salon': 'Will play next in the room',
+  'Demande envoyée : lecture dans le salon': 'Request sent: playing in the room', 'Demande envoyée à l\'hôte': 'Request sent to the host', 'Demande envoyée : titre suivant': 'Request sent: next track',
+  'Dans ce salon, seul l\'hôte pilote la lecture.': 'In this room, only the host controls playback.', 'Dans ce salon, seul l\'hôte choisit les titres.': 'In this room, only the host picks the tracks.',
+  'L\'hôte n\'a pas autorisé cette action.': 'The host has not allowed this action.', 'Seuls les titres en ligne peuvent être proposés au salon.': 'Only online tracks can be suggested to the room.',
+  'C\'est l\'hôte qui choisit les titres.': 'The host picks the tracks.', 'Vous pouvez ajouter des titres à la file du salon.': 'You can add tracks to the room queue.',
+  'Vous pouvez ajouter des titres et choisir le prochain.': 'You can add tracks and choose the next one.', 'Vous pouvez lancer un titre, mettre en pause et passer au suivant.': 'You can start a track, pause and skip.',
 };
 
 // Phrases avec une partie variable
@@ -208,7 +221,7 @@ export const EN_PATTERNS = [
   [/^(\d+) pts · (\d+) joueur\(s\)$/, '$1 pts · $2 player(s)'],
   [/^Réponses :$/, 'Answers:'],
   [/^sur (\d+)$/, 'of $1'],
-  [/^Mode soirée : cet appareil diffuse la musique et affiche un QR code ; chacun répond sur son téléphone\.(?: Ton record en (.*) : (\d+) points\.)?$/, (m, c, r) => `Party mode: this device plays the music and shows a QR code; everyone answers on their phone.${c ? ` Your best in ${c}: ${r} points.` : ''}`],
+  [/^Mode soirée : cet appareil affiche un QR code et chacun répond sur son téléphone\. Ensemble dans la même pièce, le son sort de cet appareil ; à distance, choisissez « Sur chaque téléphone »\.(?: Ton record en (.*) : (\d+) points\.)?$/, (m, c, r) => `Party mode: this device shows a QR code and everyone answers on their phone. In the same room, sound comes from this device; remotely, choose “On each phone”.${c ? ` Your best in ${c}: ${r} points.` : ''}`],
   [/^Manche (\d+)\/(\d+)$/, 'Round $1/$2'],
   [/^(\d+) pts$/, '$1 pts'],
   [/^Série ×(\d)$/, 'Streak ×$1'],
