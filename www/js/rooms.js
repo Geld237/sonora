@@ -7,6 +7,7 @@ const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => ALPHA[b % ALPHA.length]).join('');
 const POLL = 3000;
 
+let joining = false;
 let room = null;      // { code, host: bool, timer, offset, last }
 let hooks = null;     // { getState, apply, onStatus }
 const listeners = new Set();
@@ -16,7 +17,8 @@ export const currentRoom = () => room;
 export function onRoom(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 export function initRooms(h) { hooks = h; }
 
-function fields(obj) { return { fields: { data: { stringValue: JSON.stringify(obj) }, at: { integerValue: String(Date.now()) } } }; }
+// « owner » = identité de l'auteur du document : la règle Firestore n'autorise que lui à le modifier
+function fields(obj) { return { fields: { data: { stringValue: JSON.stringify(obj) }, at: { integerValue: String(Date.now()) }, owner: { stringValue: cloud.getSession()?.uid || '' } } }; }
 function parse(doc) { try { return { data: JSON.parse(doc.fields.data.stringValue), updateTime: Date.parse(doc.updateTime) }; } catch (_) { return null; } }
 
 /** Écrit l'état du salon ; renvoie l'heure du serveur (pour compenser le décalage des horloges). */
@@ -76,12 +78,13 @@ export async function setRoomPerm(perm) {
 
 /** Hôte : publie l'état (à chaque changement, et toutes les 8 secondes). */
 export async function pushState(force = true) {
-  if (!room?.host) return;
+  const r = room;
+  if (!r?.host) return;
   const snap = snapshot();
   const sig = JSON.stringify([snap.track?.key, snap.playing, snap.perm, snap.queue.map((t) => t.key)]);
-  if (!force && sig === room.last && !snap.playing) return;
-  room.last = sig;
-  try { await write(room.code, snap); room.error = ''; } catch (e) { room.error = e.message; emit(); }
+  if (!force && sig === r.last && !snap.playing) return;
+  r.last = sig;
+  try { await write(r.code, snap); r.error = ''; } catch (e) { if (room === r) { r.error = e.message; emit(); } }
 }
 
 /** Hôte : lit les demandes des invités (ajouter un titre, choisir le suivant, piloter la lecture). */
@@ -114,16 +117,22 @@ export async function joinRoom(input) {
   if (!cloud.isLoggedIn()) throw new Error('Connectez-vous à votre compte Enora (Réglages) pour écouter à plusieurs.');
   const code = String(input || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (code.length !== 6) throw new Error('Le code du salon comporte 6 caractères.');
-  await leaveRoom();
-  const doc = await cloud.authFetch(`rooms/${code}`).catch((e) => { if (e.status === 404) throw new Error('Aucun salon avec ce code.'); throw e; });
+  if (joining) throw new Error('Connexion au salon en cours…');
+  joining = true;
+  let doc;
+  try {
+    await leaveRoom();
+    doc = await cloud.authFetch(`rooms/${code}`).catch((e) => { if (e.status === 404) throw new Error('Aucun salon avec ce code.'); throw e; });
+  } finally { joining = false; }
   room = { code, host: false, offset: 0, last: '', perm: 'none', queue: [], reqs: [], member: `${code}-${cloud.getSession().uid.slice(0, 8)}` };
   // La fiche de l'invité : elle porte ses demandes, et sert à mesurer le décalage d'horloge avec le serveur
   try { await writeMember(); } catch (_) {}
   follow(doc);
-  room.timer = setInterval(async () => {
-    if (!room || room.host) return;
-    try { follow(await cloud.authFetch(`rooms/${room.code}`)); room.error = ''; }
-    catch (e) { if (e.status === 404) { hooks.onStatus?.('Le salon a été fermé.'); leaveRoom(); } else { room.error = e.message; emit(); } }
+  const r = room;
+  r.timer = setInterval(async () => {
+    if (room !== r) { clearInterval(r.timer); return; }
+    try { const d = await cloud.authFetch(`rooms/${r.code}`); if (room !== r) return; follow(d); r.error = ''; }
+    catch (e) { if (room !== r) return; if (e.status === 404) { hooks.onStatus?.('Le salon a été fermé.'); leaveRoom(); } else { r.error = e.message; emit(); } }
   }, POLL);
   emit();
   return code;
@@ -144,8 +153,10 @@ export async function sendRequest(type, track = null) {
   if (!guestCan(type)) throw new Error('L\'hôte n\'a pas autorisé cette action.');
   const t = track ? strip(track) : null;
   if (track && !t) throw new Error('Seuls les titres en ligne peuvent être proposés au salon.');
-  room.reqs = [...room.reqs, { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, type, track: t }].slice(-8);
-  await writeMember();
+  const r = room;
+  const before = r.reqs;
+  r.reqs = [...before, { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, type, track: t }].slice(-8);
+  try { await writeMember(); } catch (e) { r.reqs = before; throw e; } // envoi raté : la demande n'est pas rejouée plus tard
 }
 
 function follow(doc) {

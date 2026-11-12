@@ -111,15 +111,31 @@ class Player extends EventTarget {
     this.emit('change');
   }
 
+  /** Arrête tout : plus de son, file vidée, et un chargement en cours ne démarrera pas. */
+  stop() {
+    this.loadTok = (this.loadTok || 0) + 1;
+    clearTimeout(this.errorTimer);
+    this.cancelCrossfade();
+    for (const el of ELEMENTS) {
+      try { el.pause(); if (el.src) { el.removeAttribute('src'); el.load(); } } catch (_) {}
+    }
+    this.queue = [];
+    this.index = -1;
+    this.emit('change');
+    this.emit('state');
+  }
+
   async load(autoplay = true) {
     const t = this.current;
     if (!t) return;
+    const tok = (this.loadTok = (this.loadTok || 0) + 1); // un chargement plus récent (ou un arrêt) annule celui-ci
     this.cancelCrossfade();
     if (this.objectUrl) { URL.revokeObjectURL(this.objectUrl); this.objectUrl = null; }
     let src = t.kind === 'youtube' ? t.ytId : t.src;
     const offlineId = t.kind !== 'youtube' && (t.mediaId || this.offlineIndex.get(t.key));
     if (offlineId) {
       const rec = await db.get('blobs', offlineId).catch(() => null);
+      if (tok !== this.loadTok) return;
       if (rec && rec.blob) { this.objectUrl = URL.createObjectURL(rec.blob); src = this.objectUrl; }
     }
     // Fichier sur l'appareil -> lecteur avec égaliseur ; sinon lecteur standard
@@ -145,6 +161,7 @@ class Player extends EventTarget {
 
   toggle() {
     if (!this.current) return;
+    this.cancelCrossfade(); // sinon l'ancien titre continuerait de jouer pendant la pause
     if (this.el.paused) this.el.play().catch(() => {}); else this.el.pause();
   }
 
@@ -264,7 +281,10 @@ class Player extends EventTarget {
   onError() {
     this.emit('error');
     if (!this.current?.live && this.queue.length > 1 && this.index < this.queue.length - 1) {
-      setTimeout(() => this.next(true), 1500);
+      // Saut automatique, annulé si un autre titre a été lancé (ou la lecture arrêtée) entre-temps
+      const tok = this.loadTok;
+      clearTimeout(this.errorTimer);
+      this.errorTimer = setTimeout(() => { if (tok === this.loadTok) this.next(true); }, 1500);
     }
   }
 

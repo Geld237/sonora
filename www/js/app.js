@@ -315,6 +315,23 @@ async function addToPlaylist(track) {
 }
 
 /** Restaure la pochette locale si la piste d'une playlist est hors-ligne. */
+/** Piste reçue d'un autre appareil (salon, partie, lien) : on ne garde que des champs connus, aux bons types. */
+function safeTrack(t) {
+  if (!t || typeof t !== 'object') return null;
+  const str = (v, n = 300) => (typeof v === 'string' ? v.slice(0, n) : '');
+  const http = (v) => (/^https?:\/\//i.test(str(v, 2000)) ? str(v, 2000) : '');
+  const kind = ['youtube', 'audio', 'video'].includes(t.kind) ? t.kind : 'audio';
+  const out = {
+    key: str(t.key, 200), title: str(t.title) || '—', artist: str(t.artist), album: str(t.album), cover: http(t.cover), kind,
+    origin: str(t.origin, 20), duration: Math.max(0, +t.duration || 0), plays: Math.max(0, +t.plays || 0), year: Math.max(0, Math.floor(+t.year || 0)),
+    genre: str(t.genre, 60), mood: str(t.mood, 60), style: str(t.style, 60), live: t.live === true, link: http(t.link),
+  };
+  if (kind === 'youtube') { if (!/^[A-Za-z0-9_-]{6,20}$/.test(str(t.ytId, 30))) return null; out.ytId = t.ytId; }
+  else { out.src = http(t.src); if (!out.src) return null; }
+  if (t.ai === 'declared' || t.ai === 'probable') out.ai = t.ai;
+  return out.key ? out : null;
+}
+
 function hydrate(t) {
   const id = t.mediaId || player.offlineIndex.get(t.key);
   if (id) {
@@ -343,7 +360,7 @@ function trackRows(tracks, { removable = false, playlistId = null, numbered = fa
       <div class="rc${t.kind === 'youtube' ? ' wide' : ''}">${numbered ? `<span class="muted small">${j + 1}</span>` : `<img src="${esc(cover)}" loading="lazy" onerror="this.src='${t.kind === 'video' ? FALLBACK_VIDEO : FALLBACK_AUDIO}'">`}</div>
       <div class="ri" data-act="play" data-i="${i}">
         <div class="rt ellipsis">${esc(t.title)}${t.live ? '<span class="badge">EN DIRECT</span>' : ''}${t.kind === 'video' ? '<span class="badge">VIDÉO</span>' : ''}${offline ? '<span class="badge ok">HORS-LIGNE</span>' : ''}${t.quality === 'Sans perte' ? '<span class="badge">SANS PERTE</span>' : ''}${(() => { const cv = knownVotes(t.key); return cv && cv.up > cv.down ? `<span class="badge ai" title="Nombre de signalements « créé par IA » par les utilisateurs d'Enora">IA · ${cv.up}</span>` : ''; })()}${t.ai && !(knownVotes(t.key)?.up > knownVotes(t.key)?.down) ? `<span class="badge ai" title="${t.ai === 'declared' ? 'Titre déclaré comme créé avec une IA' : 'Mention d\'une IA dans le titre ou le nom de la chaîne'}">${t.ai === 'declared' ? 'IA' : 'IA ?'}</span>` : ''}</div>
-        <div class="ra ellipsis">${esc(t.sub || t.artist || '')}${t.duration ? ' · ' + fmtTime(t.duration) : ''}${meta && t.year ? ' · ' + t.year : ''}${meta && t.plays ? ` · ${fmtCount(t.plays)} écoutes` : ''}</div>
+        <div class="ra ellipsis">${esc(t.sub || t.artist || '')}${t.duration ? ' · ' + fmtTime(t.duration) : ''}${meta && +t.year ? ' · ' + (+t.year) : ''}${meta && t.plays ? ` · ${fmtCount(t.plays)} écoutes` : ''}</div>
       </div>
       <div class="acts">
         <button class="icon-btn ${isFav(t.key) ? 'on' : ''}" data-act="fav" data-i="${i}" title="Favori">${isFav(t.key) ? I.heartFill : I.heart}</button>
@@ -583,6 +600,27 @@ $('.brand').addEventListener('click', () => { libTab = 'offline'; go('library');
 let renderSeq = 0;
 const stale = (seq) => seq !== renderSeq;
 
+/* Films (sites ouverts dans l'application) et musique ne jouent jamais en même temps :
+   quand la musique démarre, les sites sont mis en pause et rendus muets ; ils retrouvent le son quand on y revient. */
+let musicWasPlaying = false;
+function quietWebviews() {
+  document.querySelectorAll('webview').forEach((wv) => {
+    try {
+      wv.setAudioMuted(true);
+      wv.executeJavaScript("document.querySelectorAll('video,audio').forEach(function(m){try{m.pause()}catch(e){}})").catch(() => {});
+    } catch (_) {}
+  });
+}
+function unquietWebview(container) {
+  const wv = $(container)?.querySelector('webview');
+  if (!wv) return;
+  try { if (wv.isAudioMuted()) wv.setAudioMuted(false); if (wv.isCurrentlyAudible() && player.playing) player.el.pause(); } catch (_) {}
+}
+player.addEventListener('state', () => {
+  if (player.playing && !musicWasPlaying) quietWebviews();
+  musicWasPlaying = player.playing;
+});
+
 async function render(keepScroll = false) {
   const seq = ++renderSeq;
   const scroll = view.scrollTop;
@@ -592,6 +630,8 @@ async function render(keepScroll = false) {
   $('#yt-container').classList.toggle('hidden', !isYt);
   $('#web-container').classList.toggle('hidden', !isWebPanel);
   view.classList.toggle('hidden', isYt || isWebPanel);
+  if (isYt) unquietWebview('#yt-container');
+  if (isWebPanel) unquietWebview('#web-container');
   const views = { library: viewLibrary, music: viewMusic, album: viewAlbum, films: viewFilms, film: viewFilm, radio: viewRadio, youtube: viewYouTube, playlist: viewPlaylist, podcast: viewPodcast, game: viewGame, web: viewWeb, settings: viewSettings, about: viewAbout };
   await views[current.name](current.params, seq);
   if (stale(seq)) return;
@@ -735,7 +775,8 @@ async function viewPlaylist({ id }) {
    ========================================================================= */
 const GAME_BEST = 'sonora.game.best';
 const GAME_CFG = 'sonora.game.cfg';
-const GAME_DEFAULT = { rounds: 10, time: 15, options: 4, guess: 'title', teams: 0, sound: 'host' };
+const GAME_DEFAULT = { rounds: 10, time: 15, options: 4, guess: 'title', teams: 0, sound: 'host', mode: 'points' };
+const HOST_ID = 'host';
 const TEAMS = [['Rouge', '#ff453a'], ['Bleu', '#0a84ff'], ['Vert', '#30d158'], ['Jaune', '#ffd60a']];
 let game = null;          // partie en cours
 let gamePool = 'trend';   // catégorie choisie
@@ -768,18 +809,17 @@ async function loadGamePool(id) {
 }
 
 function stopGameAudio() {
-  clearInterval(game?.tick); clearTimeout(game?.wait); clearTimeout(game?.nextT); clearInterval(game?.poll);
-  try { player.el.pause(); } catch (_) {}
-  player.queue = []; player.index = -1;
-  if (player.el === ytMedia) { try { ytMedia.stop(); } catch (_) {} }
-  player.emit('change');
+  clearInterval(game?.tick); clearTimeout(game?.wait); clearTimeout(game?.nextT); clearInterval(game?.poll); clearInterval(game?.clipTick);
+  player.stop();
 }
 function abortGame() {
   if (!game) return;
   const g = game;
-  if (g.mode === 'guest') { clearInterval(g.poll); clearInterval(g.clipTick); if (g.st?.cfg?.sound === 'all') stopGameAudio(); } else stopGameAudio();
+  const playing = gameActive(); // une partie finie (ou en salle d'attente) ne coupe pas la musique lancée depuis
+  clearInterval(g.tick); clearTimeout(g.wait); clearTimeout(g.nextT); clearInterval(g.poll); clearInterval(g.clipTick);
+  if (playing) player.stop();
   if (g.mode === 'host' && g.code) hostClose(g.code);
-  if (g.mode === 'guest' && g.code && g.me) playerLeave(g.code, g.me.id);
+  if (g.mode === 'guest' && g.code && g.me && !g.gone) playerLeave(g.code, g.me.id);
   game = null;
   document.body.classList.remove('game-on');
 }
@@ -824,7 +864,7 @@ function playClip(answer, onStart, onTick, onFail) {
         const dur = answer.duration || (isFinite(el.duration) ? el.duration : 0);
         game.clipStart = 0;
         if (!seeked && dur > 90) { seeked = true; game.clipStart = Math.floor(dur * 0.35); try { el.currentTime = game.clipStart; } catch (_) {} }
-        game.phase = 'play'; game.t0 = Date.now();
+        game.phase = 'play'; game.t0 = Date.now(); game.skips = 0;
         onStart();
       }
       return;
@@ -896,29 +936,52 @@ const partyLink = (code) => `${webAppUrl()}#party=${code}`;
 const optLabels = (g) => g.options.map((o) => (g.cfg.guess === 'artist' ? { t: o.artist || '—', a: '' } : { t: o.title, a: o.artist || '' }));
 function hostState(extra = {}) {
   const g = game;
-  return { v: 1, host: getProfileName() || 'Hôte', cfg: g.cfg, pool: poolName(g.pool), phase: g.phase === 'load' ? 'wait' : g.phase, i: g.i, rounds: g.rounds || g.cfg.rounds, n: ++g.seq, board: partyBoard(), ...extra };
+  return { v: 1, gno: g.gno, host: getProfileName() || 'Hôte', cfg: g.cfg, pool: poolName(g.pool), phase: g.phase === 'load' ? 'wait' : g.phase, i: g.i, rounds: g.rounds || g.cfg.rounds, n: ++g.seq, board: partyBoard(), ...extra };
 }
 function partyBoard() {
-  return Object.values(game.players).map((p) => ({ id: p.id, name: p.name, team: p.team || 0, score: p.score || 0, last: p.last || 0, ok: !!p.ok })).sort((a, b) => b.score - a.score);
+  return Object.values(game.players).map((p) => ({ id: p.id, name: p.name, team: p.team || 0, score: p.score || 0, last: p.last || 0, ok: !!p.ok, late: !!p.late })).sort((a, b) => b.score - a.score);
 }
 async function refreshPlayers() {
   const list = await hostPlayers(game.code);
+  const teams = game.cfg.teams || 0;
   for (const p of list) {
+    if (p.id === HOST_ID) continue; // l'organisateur ne passe jamais par le réseau
     const cur = game.players[p.id] || (game.players[p.id] = { id: p.id, score: 0, streak: 0 });
-    cur.name = String(p.name).slice(0, 20); cur.team = p.team || 0; cur.i = p.i; cur.pick = p.pick; cur.ms = p.ms;
+    cur.name = cleanName(p.name) || 'Joueur';
+    cur.team = teams ? Math.min(teams, Math.max(1, Math.floor(+p.team) || 1)) : 0;
+    // Une réponse ne compte que pour la partie en cours (pas celle d'une partie précédente), avec un temps plausible
+    const valid = p.g === game.gno && Number.isInteger(p.i) && Number.isInteger(p.pick);
+    cur.i = valid ? p.i : -1; cur.pick = valid ? p.pick : null;
+    cur.ms = Math.min(game.cfg.time * 1000, Math.max(300, +p.ms || 0));
   }
+  // Un joueur qui a quitté la partie disparaît de la salle d'attente (l'hôte, lui, reste)
+  if (game.phase === 'lobby') { const ids = new Set(list.map((p) => p.id)); for (const id of Object.keys(game.players)) if (id !== HOST_ID && !ids.has(id)) delete game.players[id]; }
   return list;
+}
+/** Salle d'attente de l'hôte : arrivées, départs et équipes, à chaque retour dans la salle. */
+function startLobbyPoll() {
+  const g = game;
+  clearInterval(g.poll);
+  g.poll = setInterval(async () => {
+    if (game !== g) { clearInterval(g.poll); return; }
+    if (g.phase !== 'lobby') return;
+    try {
+      const sig = () => Object.values(g.players).map((p) => `${p.id}:${p.name}:${p.team}`).join('|');
+      const before = sig();
+      await refreshPlayers();
+      if (game === g && sig() !== before) { hostWrite(g.code, hostState()).catch(() => {}); renderGame(); }
+    } catch (_) {}
+  }, 2000);
 }
 async function startParty() {
   const cfg = gameCfg();
-  game = { mode: 'host', phase: 'lobby', pool: gamePool, cfg, code: newCode(), players: {}, seq: 0, i: 0, played: [], skips: 0 };
+  game = { mode: 'host', phase: 'lobby', pool: gamePool, cfg, code: newCode(), players: {}, seq: 0, i: 0, played: [], skips: 0, gno: 1 };
+  // L'organisateur joue aussi : il répond sur cet appareil
+  game.players[HOST_ID] = { id: HOST_ID, name: getProfileName() || ensureProfileName(), team: cfg.teams ? 1 : 0, score: 0, streak: 0 };
   renderGame();
   try {
     await hostWrite(game.code, hostState());
-    game.poll = setInterval(async () => {
-      if (!game || game.mode !== 'host' || game.phase !== 'lobby') return;
-      try { const before = Object.keys(game.players).length; await refreshPlayers(); if (Object.keys(game.players).length !== before) { hostWrite(game.code, hostState()).catch(() => {}); renderGame(); } } catch (_) {}
-    }, 2000);
+    startLobbyPoll();
   } catch (e) {
     const msg = e.code === 'PERMISSION_DENIED' || e.status === 403 ? 'Le mode soirée a besoin de la règle Firestore des salons (voir le README, « Compte et synchronisation »).' : (e.message || String(e));
     game = null; renderGame(msg);
@@ -928,19 +991,19 @@ async function launchParty() {
   if (!game || game.mode !== 'host') return;
   clearInterval(game.poll);
   game.phase = 'load';
-  for (const p of Object.values(game.players)) { p.score = 0; p.streak = 0; p.last = 0; }
+  for (const p of Object.values(game.players)) { p.score = 0; p.streak = 0; p.last = 0; p.i = -1; p.pick = null; }
   game.i = 0; game.played = []; game.skips = 0; game.options = null;
   document.body.classList.add('game-on');
   closeNowPlaying();
   renderGame();
   try { if (await prepareGame()) hostRound(); }
-  catch (e) { const code = game?.code; const msg = e.message || String(e); if (game) { game.phase = 'lobby'; document.body.classList.remove('game-on'); } renderGame(msg); if (!code) abortGame(); }
+  catch (e) { const msg = e.message || String(e); if (game) { game.phase = 'lobby'; document.body.classList.remove('game-on'); player.stop(); startLobbyPoll(); hostWrite(game.code, hostState()).catch(() => {}); } renderGame(msg); }
 }
 function hostRound() {
   if (!game) return;
   if (game.i >= game.rounds || game.cursor >= game.tracks.length) return hostEnd();
   drawRound();
-  game.answers = 0;
+  game.answers = 0; game.winner = '';
   renderGame();
   let lastPoll = 0;
   playClip(game.answer, () => {
@@ -949,30 +1012,55 @@ function hostRound() {
     hostWrite(game.code, hostState({ opts: optLabels(game), ...(clip ? { clip } : {}) })).catch(() => {});
     renderGame();
   }, async (left) => {
-    if (Date.now() - lastPoll < 1200 || game.polling) return;
-    lastPoll = Date.now(); game.polling = true;
+    if (Date.now() - lastPoll < (game.cfg.mode === 'first' ? 800 : 1200) || game.polling) return;
+    const g = game;
+    lastPoll = Date.now(); g.polling = true;
     try {
       await refreshPlayers();
-      const all = Object.values(game.players);
-      game.answers = all.filter((p) => p.i === game.i && p.pick != null).length;
-      const el = $('#g-answers'); if (el) el.textContent = `${game.answers}/${all.length}`;
-      if (game.phase === 'play' && ((all.length && game.answers === all.length) || left <= -1.5)) hostReveal();
-    } catch (_) { if (left <= -4 && game.phase === 'play') hostReveal(); } finally { if (game) game.polling = false; }
+      if (game === g) checkRoundEnd(left);
+    } catch (_) { if (game === g && left <= -4 && g.phase === 'play') hostReveal(); } finally { g.polling = false; }
   }, () => clipFailed(hostRound));
+}
+/** L'organisateur répond sur son propre écran. */
+function hostPick(key) {
+  const g = game;
+  const me = g?.players[HOST_ID];
+  if (!g || g.mode !== 'host' || g.phase !== 'play' || !me || me.i === g.i) return;
+  me.i = g.i; me.pick = g.options.findIndex((o) => o.key === key); me.ms = Date.now() - g.t0;
+  g.picked = key;
+  checkRoundEnd();
+  if (game === g && g.phase === 'play') renderGame();
+}
+/** Fin de manche : tout le monde a répondu, ou (mode « premier qui trouve ») quelqu'un a la bonne réponse. */
+function checkRoundEnd(left = 1) {
+  const g = game;
+  if (!g || g.phase !== 'play') return;
+  const all = Object.values(g.players);
+  const answered = all.filter((p) => p.i === g.i && p.pick != null);
+  g.answers = answered.length;
+  const el = $('#g-answers'); if (el) el.textContent = `${g.answers}/${all.length}`;
+  const right = g.options.indexOf(g.answer);
+  const found = g.cfg.mode === 'first' && answered.some((p) => p.pick === right);
+  if (found || (all.length && answered.length === all.length) || left <= -1.5) hostReveal();
 }
 function hostReveal() {
   const g = game;
   clearInterval(g.tick);
   const right = g.options.indexOf(g.answer);
+  const first = g.cfg.mode === 'first';
+  // Mode « premier qui trouve » : seul le plus rapide parmi les bonnes réponses marque
+  const winner = first ? Object.values(g.players).filter((p) => p.i === g.i && p.pick === right).sort((a, b) => (a.ms || 0) - (b.ms || 0))[0] : null;
   for (const p of Object.values(g.players)) {
-    const ok = p.i === g.i && p.pick === right;
-    if (ok) { p.streak = (p.streak || 0) + 1; p.last = pointsFor(1 - (p.ms || 0) / (g.cfg.time * 1000), p.streak); p.score = (p.score || 0) + p.last; }
+    const good = p.i === g.i && p.pick === right;
+    const ok = first ? p === winner : good;
+    if (ok) { p.streak = (p.streak || 0) + 1; p.last = first ? 100 * multOf(p.streak) : pointsFor(1 - (p.ms || 0) / (g.cfg.time * 1000), p.streak); p.score = (p.score || 0) + p.last; }
     else { p.streak = 0; p.last = 0; }
-    p.ok = ok;
+    p.ok = ok; p.late = first && good && !ok;
   }
+  g.winner = winner ? winner.name : '';
   g.played.push(g.answer);
   g.phase = 'reveal';
-  hostWrite(g.code, hostState({ opts: optLabels(g), answer: right, reveal: { title: g.answer.title, artist: g.answer.artist || '', cover: /^https?:/.test(g.answer.cover || '') ? g.answer.cover : '' } })).catch(() => {});
+  hostWrite(g.code, hostState({ opts: optLabels(g), answer: right, winner: g.winner, reveal: { title: g.answer.title, artist: g.answer.artist || '', cover: /^https?:/.test(g.answer.cover || '') ? g.answer.cover : '' } })).catch(() => {});
   g.i++;
   renderGame();
   g.nextT = setTimeout(hostRound, 6000);
@@ -1015,11 +1103,31 @@ function guestPlayClip(clip) {
   }, 250);
 }
 
+/** État de la partie reçu de l'hôte : types vérifiés avant tout affichage (nombres, textes courts, valeurs connues). */
+function cleanPartyState(s) {
+  if (!s || typeof s !== 'object' || !s.cfg || typeof s.cfg !== 'object') return null;
+  const int = (v, min, max, d) => { const n = Math.floor(+v); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d; };
+  const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
+  const cfg = {
+    rounds: int(s.cfg.rounds, 1, 50, 10), time: int(s.cfg.time, 5, 60, 15), options: int(s.cfg.options, 2, 8, 4), teams: int(s.cfg.teams, 0, TEAMS.length, 0),
+    guess: s.cfg.guess === 'artist' ? 'artist' : 'title', sound: s.cfg.sound === 'all' ? 'all' : 'host', mode: s.cfg.mode === 'first' ? 'first' : 'points',
+  };
+  const out = {
+    cfg, gno: int(s.gno, 0, 1e6, 0), n: int(s.n, 0, 1e9, 0), i: int(s.i, 0, 50, 0), rounds: int(s.rounds, 1, 50, cfg.rounds),
+    phase: ['lobby', 'wait', 'play', 'reveal', 'end'].includes(s.phase) ? s.phase : 'wait', host: str(s.host, 20), pool: str(s.pool, 40), winner: str(s.winner, 20),
+    board: (Array.isArray(s.board) ? s.board : []).slice(0, 80).map((p) => ({ id: str(p?.id, 60), name: str(p?.name, 20) || 'Joueur', team: int(p?.team, 0, cfg.teams, 0), score: int(p?.score, 0, 1e7, 0), last: int(p?.last, 0, 1e5, 0), ok: p?.ok === true, late: p?.late === true })),
+    opts: (Array.isArray(s.opts) ? s.opts : []).slice(0, 8).map((o) => ({ t: str(o?.t, 200), a: str(o?.a, 200) })),
+  };
+  if (s.reveal && typeof s.reveal === 'object') out.reveal = { title: str(s.reveal.title, 200), artist: str(s.reveal.artist, 200) };
+  if (s.clip && typeof s.clip === 'object') { const t = safeTrack({ ...s.clip.t, title: '…', artist: '' }); out.clip = { t, start: int(s.clip.start, 0, 36000, 0) }; }
+  return out;
+}
+
 /* ---------- Mode soirée : joueur ---------- */
 async function joinParty(codeRaw, name, team) {
   const code = cleanCode(codeRaw);
   if (code.length !== 5) throw new Error('Le code de la partie comporte 5 caractères.');
-  const st = await readParty(code);
+  const st = cleanPartyState(await readParty(code));
   if (!st) throw new Error('Aucune partie avec ce code. Vérifiez-le sur l\'écran de l\'hôte.');
   const id = await myId();
   const me = { id, name, team: st.cfg.teams ? team || 1 : 0 };
@@ -1027,15 +1135,17 @@ async function joinParty(codeRaw, name, team) {
   game = { mode: 'guest', code, me, st, seenN: -1, picked: null };
   const onState = (s) => {
     if (!game || game.mode !== 'guest') return;
-    if (!s) { const m = 'La partie est terminée ou a été fermée par l\'hôte.'; clearInterval(game.poll); game = null; renderGame(m); return; }
-    if (s.n === game.st.n && game.seenN !== -1) return;
+    if (!s) { const m = 'La partie est terminée ou a été fermée par l\'hôte.'; game.gone = true; abortGame(); renderGame(m); return; }
+    s = cleanPartyState(s);
+    if (!s) return;
+    if (game.seenN !== -1 && s.n <= game.st.n) return; // état déjà vu, ou réponse réseau en retard
     const fresh = s.phase === 'play' && (game.st.phase !== 'play' || game.st.i !== s.i || game.seenN === -1);
     if (fresh) { game.t0 = Date.now(); game.picked = null; }
     game.st = s; game.seenN = s.n;
     if (s.cfg.sound === 'all') {
       document.body.classList.toggle('game-on', s.phase !== 'end' && s.phase !== 'lobby');
       if (fresh) { closeNowPlaying(); guestPlayClip(s.clip); }
-      else if (s.phase === 'end') { clearInterval(game.clipTick); stopGameAudio(); }
+      else if (s.phase === 'end' || s.phase === 'lobby') { clearInterval(game.clipTick); if (player.current) player.stop(); }
     }
     renderGame();
   };
@@ -1047,7 +1157,7 @@ async function guestPick(idx) {
   if (!g || g.mode !== 'guest' || g.st.phase !== 'play' || g.picked != null) return;
   g.picked = idx;
   renderGame();
-  try { await playerWrite(g.code, g.me.id, { name: g.me.name, team: g.me.team, i: g.st.i, pick: idx, ms: Math.max(0, Date.now() - g.t0) }); }
+  try { await playerWrite(g.code, g.me.id, { name: g.me.name, team: g.me.team, g: g.st.gno, i: g.st.i, pick: idx, ms: Math.max(0, Date.now() - g.t0) }); }
   catch (e) { toast('Réponse non envoyée : ' + (e.message || e)); g.picked = null; renderGame(); }
 }
 
@@ -1060,7 +1170,7 @@ function boardHtml(board, cfg, meId = '', max = 12) {
       .filter((x) => x.size).sort((a, b) => b.score - a.score);
     teams = `<div class="g-teams">${t.map((x, k) => `<div class="g-team" style="--tc:${x.c}"><span>${k + 1}</span><b>${x.n}</b><i>${x.score} pts · ${x.size} joueur(s)</i></div>`).join('')}</div>`;
   }
-  return `${teams}<div class="g-board">${board.slice(0, max).map((p, k) => `<div class="g-line ${p.id === meId ? 'me' : ''}"><span class="g-pos">${k + 1}</span>${cfg.teams && p.team ? `<i class="g-dot" style="background:${TEAMS[p.team - 1][1]}"></i>` : ''}<b data-notr>${esc(p.name)}</b>${p.last ? `<em>+${p.last}</em>` : ''}<span class="g-sc">${p.score}</span></div>`).join('')}</div>`;
+  return `${teams}<div class="g-board">${board.slice(0, max).map((p, k) => `<div class="g-line ${p.id === meId ? 'me' : ''}"><span class="g-pos">${k + 1}</span>${cfg.teams && p.team ? `<i class="g-dot" style="background:${TEAMS[p.team - 1]?.[1] || 'transparent'}"></i>` : ''}<b data-notr>${esc(p.name)}</b>${p.last ? `<em>+${p.last}</em>` : ''}<span class="g-sc">${p.score}</span></div>`).join('')}</div>`;
 }
 
 function renderGame(error = '') {
@@ -1083,6 +1193,7 @@ function renderGame(error = '') {
         ${row('Réponses proposées', 'options', [[3, '3'], [4, '4'], [6, '6']])}
         ${row('À deviner', 'guess', [['title', 'Le titre'], ['artist', 'L\'artiste']])}
         ${row('Équipes (mode soirée)', 'teams', [[0, 'Chacun pour soi'], [2, '2 équipes'], [3, '3 équipes'], [4, '4 équipes']])}
+        ${row('Règle (mode soirée)', 'mode', [['points', 'Compétition : points de rapidité'], ['first', 'Le premier qui trouve']])}
         ${row('Son (mode soirée)', 'sound', [['host', 'Sur cet appareil'], ['all', 'Sur chaque téléphone (à distance)']])}
       </div>
       <div class="g-modes">
@@ -1097,7 +1208,7 @@ function renderGame(error = '') {
         <button class="btn ghost">Rejoindre</button></form>
     </div>`;
     view.querySelectorAll('[data-gp]').forEach((b) => (b.onclick = () => { gamePool = b.dataset.gp; renderGame(); }));
-    view.querySelectorAll('[data-gc]').forEach((b) => (b.onclick = () => { setGameCfg(b.dataset.gc, ['guess', 'sound'].includes(b.dataset.gc) ? b.dataset.gv : +b.dataset.gv); renderGame(); }));
+    view.querySelectorAll('[data-gc]').forEach((b) => (b.onclick = () => { setGameCfg(b.dataset.gc, ['guess', 'sound', 'mode'].includes(b.dataset.gc) ? b.dataset.gv : +b.dataset.gv); renderGame(); }));
     $('#g-start').onclick = startGame;
     $('#g-party').onclick = startParty;
     $('#g-join').onsubmit = async (e) => {
@@ -1128,7 +1239,8 @@ function renderGame(error = '') {
         : `${g.needTap ? `<button class="btn g-start" id="g-tap" style="display:flex;margin:10px auto">${ic('play', 'Toucher pour écouter l\'extrait')}</button>` : ''}${s.cfg.sound === 'all' && g.noClip ? '<p class="muted small" style="text-align:center">Cet extrait ne peut être écouté que sur l\'appareil de l\'hôte.</p>' : ''}
            <p class="muted g-hint">${s.cfg.guess === 'artist' ? 'Qui chante ?' : 'Quel est ce titre ?'}</p><div class="g-opts big">${(s.opts || []).map((o, k) => `<button class="g-opt" data-pick="${k}"><b data-notr>${esc(o.t)}</b><span data-notr>${esc(o.a)}</span></button>`).join('')}</div>`;
     } else if (s.phase === 'reveal') {
-      body = `<div class="g-wait"><div class="g-verdict static ${mine?.ok ? 'ok' : 'ko'}">${mine?.ok ? `+${mine.last}` : 'Raté'}</div>
+      body = `<div class="g-wait"><div class="g-verdict static ${mine?.ok ? 'ok' : 'ko'}">${mine?.ok ? `+${mine.last}` : mine?.late ? 'Trop tard' : 'Raté'}</div>
+        ${s.cfg.mode === 'first' ? `<p class="muted">${s.winner ? `<b data-notr>${esc(s.winner)}</b> a trouvé en premier` : 'Personne n\'a trouvé'}</p>` : ''}
         <h1 data-notr>${esc(s.reveal?.title || '')}</h1><p class="muted" data-notr>${esc(s.reveal?.artist || '')}</p>
         <p class="g-rank">${rank ? `${rank}<sup>e</sup> sur ${s.board.length}` : ''}</p>${boardHtml(s.board || [], s.cfg, g.me.id, 5)}</div>`;
     } else if (s.phase === 'end') {
@@ -1154,11 +1266,13 @@ function renderGame(error = '') {
         <div><span class="g-tag">${ic('users', 'Mode soirée')}</span><h1>Scannez pour jouer</h1>
           <p class="muted">Chaque joueur scanne le QR code avec son téléphone, ou ouvre Enora → Jeu → « Rejoindre une partie » et saisit ce code :</p>
           <div class="room-code">${esc(g.code)}</div>
-          <p class="muted small">${esc(poolName(g.pool))} · ${cfg.rounds} extraits · ${cfg.time} s · ${cfg.teams ? `${cfg.teams} équipes` : 'chacun pour soi'} · ${cfg.sound === 'all' ? 'son sur chaque téléphone' : 'son sur cet appareil'}</p></div></div>
-      <h2>${n} joueur(s)</h2>${boardHtml(partyBoard(), cfg, '', 60)}
+          <p class="muted small">${esc(poolName(g.pool))} · ${cfg.rounds} extraits · ${cfg.time} s · ${cfg.teams ? `${cfg.teams} équipes` : 'chacun pour soi'} · ${cfg.mode === 'first' ? 'le premier qui trouve' : 'compétition'} · ${cfg.sound === 'all' ? 'son sur chaque téléphone' : 'son sur cet appareil'}</p></div></div>
+      ${cfg.teams ? `<h2>Votre équipe</h2><div class="g-teampick">${TEAMS.slice(0, cfg.teams).map(([nm, c], k) => `<button class="g-tbtn ${g.players[HOST_ID]?.team === k + 1 ? 'on' : ''}" style="--tc:${c}" data-hteam="${k + 1}">${nm}</button>`).join('')}</div>` : ''}
+      <h2>${n} joueur(s)</h2>${boardHtml(partyBoard(), cfg, HOST_ID, 60)}
       <div class="g-actions"><button class="btn g-start" id="g-launch" ${n ? '' : 'disabled'}>${ic('play', 'Lancer la partie')}</button><button class="btn ghost" id="g-copy">Copier le lien</button><button class="btn ghost" id="g-quit">Annuler</button></div>
     </div>`;
     $('#g-launch').onclick = launchParty;
+    view.querySelectorAll('[data-hteam]').forEach((b) => (b.onclick = () => { g.players[HOST_ID].team = +b.dataset.hteam; hostWrite(g.code, hostState()).catch(() => {}); renderGame(); }));
     $('#g-copy').onclick = () => copyText(partyLink(g.code), 'Lien copié');
     $('#g-quit').onclick = () => { abortGame(); renderGame(); };
     return;
@@ -1177,7 +1291,13 @@ function renderGame(error = '') {
         ${solo ? `<button class="btn ghost" id="g-share">${ic('share', 'Partager mon score')}</button>` : ''}<button class="btn ghost" id="g-save">Garder les titres en playlist</button></div>
       <h2>Les titres de la partie</h2>${(() => { rowTracks = []; return trackRows(g.played, { meta: true }); })()}
     </div>`;
-    $('#g-again').onclick = solo ? startGame : () => { g.phase = 'lobby'; hostWrite(g.code, hostState()).catch(() => {}); renderGame(); };
+    $('#g-again').onclick = solo ? startGame : () => {
+      g.phase = 'lobby'; g.gno++; g.options = null; g.winner = '';
+      for (const p of Object.values(g.players)) { p.score = 0; p.streak = 0; p.last = 0; p.ok = false; p.late = false; p.i = -1; p.pick = null; }
+      hostWrite(g.code, hostState()).catch(() => {});
+      startLobbyPoll();
+      renderGame();
+    };
     $('#g-menu').onclick = () => { abortGame(); renderGame(); };
     const sh = $('#g-share');
     if (sh) sh.onclick = () => {
@@ -1209,12 +1329,12 @@ function renderGame(error = '') {
         : `<svg class="g-ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/><circle class="run" cx="60" cy="60" r="52" style="animation-duration:${cfg.time}s"/></svg>
            <div class="g-count" id="g-count">${g.phase === 'play' ? cfg.time : ''}</div><div class="g-bars"><i></i><i></i><i></i><i></i><i></i></div>`}
     </div>
-    <p class="muted g-hint">${g.phase === 'load' ? 'Chargement de l\'extrait…' : reveal ? (host ? `<b data-notr>${esc(g.answer.title)}</b> · <span data-notr>${esc(g.answer.artist || '')}</span>` : '') : host ? 'Répondez sur vos téléphones' : byArtist ? 'Qui chante ?' : 'Quel est ce titre ?'}</p>
-    <div class="g-opts n${g.options.length}">${g.options.map((o) => `<button class="g-opt ${reveal ? (o.key === g.answer.key ? 'ok' : o.key === g.picked ? 'ko' : 'dim') : ''}" data-go="${esc(o.key)}" ${g.phase === 'play' && !host ? '' : 'disabled'}><b data-notr>${esc(byArtist ? o.artist || '—' : o.title)}</b><span data-notr>${esc(byArtist ? '' : o.artist || '')}</span></button>`).join('')}</div>
-    ${host && reveal ? `<h2>Classement</h2>${boardHtml(partyBoard(), cfg, '', 8)}` : ''}
+    <p class="muted g-hint">${g.phase === 'load' ? 'Chargement de l\'extrait…' : reveal ? (host ? `<b data-notr>${esc(g.answer.title)}</b> · <span data-notr>${esc(g.answer.artist || '')}</span>${g.cfg.mode === 'first' ? ` — ${g.winner ? `<b data-notr>${esc(g.winner)}</b> a trouvé en premier` : 'personne n\'a trouvé'}` : ''}` : '') : host ? (g.picked ? 'Réponse enregistrée' : cfg.mode === 'first' ? 'Le premier qui trouve marque le point' : 'Répondez : ici ou sur vos téléphones') : byArtist ? 'Qui chante ?' : 'Quel est ce titre ?'}</p>
+    <div class="g-opts n${g.options.length}">${g.options.map((o) => `<button class="g-opt ${reveal ? (o.key === g.answer.key ? 'ok' : o.key === g.picked ? 'ko' : 'dim') : host && g.picked ? (o.key === g.picked ? 'sel' : 'dim') : ''}" data-go="${esc(o.key)}" ${g.phase === 'play' && !(host && g.picked) ? '' : 'disabled'}><b data-notr>${esc(byArtist ? o.artist || '—' : o.title)}</b><span data-notr>${esc(byArtist ? '' : o.artist || '')}</span></button>`).join('')}</div>
+    ${host && reveal ? `<h2>Classement</h2>${boardHtml(partyBoard(), cfg, HOST_ID, 8)}` : ''}
   </div>`;
   $('#g-quit').onclick = () => { abortGame(); renderGame(); };
-  if (!host) view.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => answerGame(b.dataset.go)));
+  view.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => (host ? hostPick(b.dataset.go) : answerGame(b.dataset.go))));
 }
 
 async function viewGame() { renderGame(); }
@@ -1393,7 +1513,7 @@ function openTrackInfo(t) {
     $('#ai-down', c).onclick = cast(-1);
   }
   const lk = $('#info-link', c);
-  if (lk) lk.onclick = () => window.open(t.link, '_blank');
+  if (lk) lk.onclick = () => { if (/^https?:\/\//i.test(t.link)) window.open(t.link, '_blank', 'noopener'); };
   if (t.kind !== 'youtube') return;
   const note = 'Année et écoutes : chiffres publics de YouTube. YouTube ne fournit pas d\'indicateur fiable pour les titres créés par IA : Enora repère seulement les mentions écrites.';
   ytDetails(t.ytId).then((d) => {
@@ -2050,7 +2170,7 @@ function buildElectronYouTube() {
     if (e.isMainFrame && e.errorCode !== -3) toast('YouTube ne répond pas. Vérifiez votre connexion internet puis touchez ⟳.', 5000);
   });
   // Quand une vidéo YouTube démarre, on met en pause la musique de l'appli.
-  wv.addEventListener('media-started-playing', () => { if (player.playing) player.toggle(); });
+  wv.addEventListener('media-started-playing', () => { if (wv.isAudioMuted && wv.isAudioMuted()) return; if (player.playing) player.el.pause(); });
   syncUi();
 }
 
@@ -2065,6 +2185,7 @@ async function openYouTubeAt({ query = '', music = false } = {}) {
   const url = query ? `https://m.youtube.com/results?search_query=${encodeURIComponent(query)}` : 'https://m.youtube.com/';
   if (isMobile) {
     if (player.playing) player.toggle();
+    if (player.playing) player.el.pause();
     try { await openYouTubeNative(url, { audioOnly: getAudioOnly(), adblock: !isStoreBuild }); } catch (e) { toast('Erreur : ' + e.message); }
   } else {
     window.open(url, '_blank');
@@ -2160,6 +2281,7 @@ async function openSite(url) {
   if (player.playing && player.current?.kind !== 'audio') player.toggle();
   if (platform === 'electron') { webOpen = url; go('web', { tab: 'films' }); return; }
   if (isMobile) {
+    if (player.playing) player.el.pause(); // le film s'ouvre par-dessus l'application : la musique s'arrête
     try { await openWebNative(url); } catch (e) { toast('Erreur : ' + e.message); }
     return;
   }
@@ -2211,7 +2333,7 @@ function showWebPanel(url) {
     wv.addEventListener('did-fail-load', (e) => {
       if (e.isMainFrame && e.errorCode !== -3) toast('Le site ne répond pas. Vérifiez le lien ou votre connexion.', 5000);
     });
-    wv.addEventListener('media-started-playing', () => { if (player.playing) player.toggle(); });
+    wv.addEventListener('media-started-playing', () => { if (wv.isAudioMuted && wv.isAudioMuted()) return; if (player.playing) player.el.pause(); });
   }
   if (webLoaded !== url) {
     webLoaded = url;
@@ -2801,7 +2923,7 @@ $('#np-video-toggle').onclick = () => {
   if (current.name === 'music') render(true);
 };
 
-$('#mini-open').onclick = openNowPlaying;
+$('#mini-open').onclick = () => { if (Date.now() - swipedAt > 500) openNowPlaying(); }; // pas d'ouverture juste après un glissement
 $('#np-close').onclick = closeNowPlaying;
 // Dans un salon, les commandes d'un invité deviennent des demandes à l'hôte (si celui-ci l'a autorisé)
 const roomGuest = () => { const r = currentRoom(); return !!r && !r.host; };
@@ -2817,6 +2939,28 @@ $('#mini-next').onclick = ctl('skip', () => player.next());
 $('#np-next').onclick = ctl('skip', () => player.next());
 $('#mini-prev').onclick = () => player.prev();
 $('#np-prev').onclick = () => player.prev();
+/** Glisser vers la gauche = titre suivant, vers la droite = titre précédent (barre de lecture et lecteur plein écran). */
+function swipeToSkip(el) {
+  let x0 = 0, y0 = 0, t0 = 0, moved = false;
+  el.addEventListener('touchstart', (e) => { const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); moved = false; }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    const dx = e.touches[0].clientX - x0;
+    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(e.touches[0].clientY - y0)) { moved = true; el.style.transform = `translateX(${Math.max(-70, Math.min(70, dx * 0.5))}px)`; el.style.opacity = String(1 - Math.min(0.5, Math.abs(dx) / 300)); }
+  }, { passive: true });
+  const end = (e) => {
+    el.style.transform = ''; el.style.opacity = '';
+    if (!moved) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(t.clientY - y0) * 1.5 || Date.now() - t0 > 900 || !player.current) return;
+    swipedAt = Date.now();
+    if (dx < 0) ctl('skip', () => player.next())(); else if (!roomGuest()) player.prev();
+  };
+  el.addEventListener('touchend', end);
+  el.addEventListener('touchcancel', () => { el.style.transform = ''; el.style.opacity = ''; });
+}
+let swipedAt = 0;
+for (const sel of ['#mini-open', '.np-meta', '#np-cover']) { const el = $(sel); if (el) swipeToSkip(el); }
 $('#np-shuffle').onclick = () => player.toggleShuffle();
 $('#np-repeat').onclick = () => player.cycleRepeat();
 $('#mini-vol').oninput = (e) => player.setVolume(+e.target.value);
@@ -2916,11 +3060,12 @@ function renderLyrics() {
   const t = player.current;
   const m = currentMedia();
   addBtn.style.display = m && !m.lyrics && t.kind === 'audio' ? 'flex' : 'none';
-  if (!t || !lyricsOn()) { box.classList.add('hidden'); lyricsState = { key: null, timed: false, lines: [], active: -1 }; applyLyricsLayout(); return; }
+  if (!t || !lyricsOn()) { exitLyricsFull(); box.classList.add('hidden'); lyricsState = { key: null, timed: false, lines: [], active: -1 }; applyLyricsLayout(); return; }
   // 1. Paroles ajoutées par l'utilisateur (fichier .lrc)
   if (m && m.lyrics) { if (lyricsState.key !== `m:${m.id}`) setLyrics(`m:${m.id}`, m.lyrics); return; }
-  if (gameActive()) { box.classList.add('hidden'); applyLyricsLayout(); return; }
+  if (gameActive()) { exitLyricsFull(); box.classList.add('hidden'); lyricsState = { key: null, timed: false, lines: [], active: -1 }; applyLyricsLayout(); return; }
   if (lyricsState.key === t.key) return; // déjà affichées ou recherche en cours
+  exitLyricsFull(); // le nouveau titre n'a peut-être pas de paroles : on ne reste pas sur un plein écran vide
   box.classList.add('hidden');
   applyLyricsLayout();
   lyricsState = { key: t.key, timed: false, lines: [], active: -1 };
@@ -3082,7 +3227,10 @@ initRooms({
   getState: () => ({ track: player.current, position: player.el.currentTime || 0, playing: player.playing, queue: player.queue.slice(player.index + 1, player.index + 26) }),
   onStatus: (msg) => toast(msg, 4000),
   // Invité : suit l'hôte (titre, position, lecture/pause) et reprend la file d'attente du salon
-  async apply({ track, playing, position, queue = [] }) {
+  async apply({ track: rawTrack, playing, position, queue: rawQueue = [] }) {
+    const track = safeTrack(rawTrack);
+    const queue = (Array.isArray(rawQueue) ? rawQueue : []).map(safeTrack).filter(Boolean);
+    position = Math.max(0, +position || 0);
     if (!track) { if (player.playing) player.el.pause(); return; }
     const sig = `${track.key}|${queue.map((t) => t.key).join(',')}`;
     if (player.current?.key !== track.key) { roomQueueSig = sig; await player.playList([track, ...queue].map(hydrate), 0); return; } // la position est recalée au prochain passage
@@ -3093,7 +3241,8 @@ initRooms({
   },
   // Hôte : applique la demande d'un invité
   async request({ type, track }, name) {
-    const t = track ? hydrate(track) : null;
+    const clean = track ? safeTrack(track) : null;
+    const t = clean ? hydrate(clean) : null;
     if (type === 'toggle') player.toggle();
     else if (type === 'skip') player.next();
     else if (!t) return;

@@ -21,6 +21,12 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.11.0
+- **Blind test en soirée** : l'organisateur joue aussi (il répond sur son appareil) ; deux règles au choix, « Compétition » (points de rapidité) ou « Le premier qui trouve ».
+- **Téléphone** : glisser sur le titre (barre de lecture ou lecteur) pour passer au titre suivant ou précédent.
+- **Corrections** : plus de musique qui continue après avoir quitté une partie ; les films (sites ouverts dans l'application) et la musique ne jouent plus en même temps.
+- **Audit indépendant du code** : 15 constats corrigés — données reçues d'un salon ou d'une partie vérifiées avant affichage, liens externes limités à http(s), fenêtre principale verrouillée, règle Firestore `rooms` resserrée (chaque document n'est modifiable que par son auteur : **mettez à jour la règle ci-dessous**, elle exige la version 1.11.0 ou plus récente sur tous les appareils), réponses d'une partie précédente ignorées, salle d'attente qui se remet à jour, saut automatique après erreur annulable, fondu enchaîné et paroles cohérents.
+
 ## Nouveautés 1.10.0
 - **Salons d'écoute** : l'hôte choisit ce que les invités peuvent faire — écouter seulement, ajouter des titres à la file, choisir le prochain titre, ou être DJ (lancer un titre, pause, suivant). Les invités voient la file du salon.
 - **Paroles** : bouton « Paroles » pour les afficher ou non ; à droite du lecteur ou en dessous sur grand écran ; mode plein écran. Corrigés : la ligne en cours n'était pas mise en valeur en thème clair, et la page revenait sans cesse sur les paroles.
@@ -223,8 +229,13 @@ Le compte permet de retrouver sur l'ordinateur, Android et l'iPhone les **favori
          allow read, write: if request.auth != null && request.auth.uid == userId;
        }
        // Écoute à plusieurs : les salons sont lisibles et modifiables par les utilisateurs connectés
+       // Salons d'écoute et parties de blind test : chacun ne modifie que ses propres documents
        match /rooms/{room} {
-         allow read, write: if request.auth != null;
+         allow read: if request.auth != null;
+         allow create: if request.auth != null && request.resource.data.owner == request.auth.uid;
+         allow update: if request.auth != null && resource.data.owner == request.auth.uid
+           && request.resource.data.owner == request.auth.uid;
+         allow delete: if request.auth != null && resource.data.owner == request.auth.uid;
        }
        // Signalements « créé par IA » : un vote par titre et par appareil
        match /aivotes/{vote} {

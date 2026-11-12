@@ -208,6 +208,9 @@ export const EN = {
   'L\'hôte n\'a pas autorisé cette action.': 'The host has not allowed this action.', 'Seuls les titres en ligne peuvent être proposés au salon.': 'Only online tracks can be suggested to the room.',
   'C\'est l\'hôte qui choisit les titres.': 'The host picks the tracks.', 'Vous pouvez ajouter des titres à la file du salon.': 'You can add tracks to the room queue.',
   'Vous pouvez ajouter des titres et choisir le prochain.': 'You can add tracks and choose the next one.', 'Vous pouvez lancer un titre, mettre en pause et passer au suivant.': 'You can start a track, pause and skip.',
+  'Règle (mode soirée)': 'Rule (party mode)', 'Compétition : points de rapidité': 'Competition: speed points', 'Le premier qui trouve': 'First to find it', 'Votre équipe': 'Your team',
+  'Réponse enregistrée': 'Answer saved', 'Le premier qui trouve marque le point': 'The first to find it scores', 'Répondez : ici ou sur vos téléphones': 'Answer here or on your phones', 'Trop tard': 'Too late',
+  'a trouvé en premier': 'found it first', 'Personne n\'a trouvé': 'Nobody found it', 'personne n\'a trouvé': 'nobody found it',
 };
 
 // Phrases avec une partie variable

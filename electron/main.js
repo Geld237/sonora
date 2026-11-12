@@ -157,9 +157,11 @@ function createWindow() {
   setupAutoUpdate(win);
   // Les liens externes s'ouvrent dans le navigateur
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url); // jamais file:, smb: ni un protocole d'application
     return { action: 'deny' };
   });
+  // La fenêtre principale ne quitte jamais l'interface d'Enora
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('app://sonora/')) e.preventDefault(); });
 }
 
 app.on('web-contents-created', (_event, contents) => {
@@ -297,6 +299,8 @@ app.whenReady().then(() => {
     installAdblock(ses);
     ses.setPermissionRequestHandler((_wc, permission, callback) => callback(['fullscreen', 'clipboard-sanitized-write'].includes(permission))); // pas de caméra/micro
   }
+  // Fenêtre principale : aucune autorisation sensible (caméra, micro, position, notifications…)
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(['fullscreen', 'clipboard-sanitized-write', 'media-key-system'].includes(permission)));
   // Bloqueur renforcé : listes EasyList / uBlock Origin, chargées en arrière-plan (le blocage intégré reste actif en attendant)
   adblockLists.enable([yt, web], AD_FILTERS).catch(() => {});
 
