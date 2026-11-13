@@ -39,24 +39,40 @@ const ATTRS = ['title', 'placeholder', 'aria-label'];
 const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'PRE', 'CODE']);
 // Contenus de l'utilisateur ou des catalogues (titres, artistes, paroles) : jamais traduits
 const CONTENT = '.rt, .ra, .card .t, .card .a, #mini-title, #mini-artist, #np-title, #np-artist, .lyrics p, .detail h1, .detail .muted, .room-code, .pod-desc, .gs-res *, [data-notr]';
+// Texte français d'origine de chaque texte traduit : permet de changer de langue sans recharger la page
+// (un rechargement arrêtait la musique en cours).
+const origText = new WeakMap();   // nœud texte -> { fr, shown }
+const origAttr = new WeakMap();   // élément -> { attribut: { fr, shown } }
+
+function frOf(entry, current) { return entry && entry.shown === current ? entry.fr : current; }
+
 function translateNode(node) {
   if (node.nodeType === 3) {
     const v = node.nodeValue;
     if (!v || v.trim().length < 2 || node.parentElement?.matches(CONTENT)) return;
-    const t = tr(v);
+    const fr = frOf(origText.get(node), v);
+    const t = lang === 'fr' ? fr : tr(fr);
+    if (t !== fr || origText.has(node)) origText.set(node, { fr, shown: t });
     if (t !== v) node.nodeValue = t;
     return;
   }
   if (node.nodeType !== 1 || SKIP.has(node.tagName)) return;
-  for (const a of ATTRS) { const v = node.getAttribute(a); if (v) { const t = tr(v); if (t !== v) node.setAttribute(a, t); } }
+  for (const a of ATTRS) {
+    const v = node.getAttribute(a);
+    if (!v) continue;
+    const map = origAttr.get(node) || {};
+    const fr = frOf(map[a], v);
+    const t = lang === 'fr' ? fr : tr(fr);
+    if (t !== fr || map[a]) { map[a] = { fr, shown: t }; origAttr.set(node, map); }
+    if (t !== v) node.setAttribute(a, t);
+  }
   for (const c of node.childNodes) translateNode(c);
 }
 
-/** Applique la langue choisie ('auto' = langue de l'appareil). Un changement en cours d'utilisation recharge la page. */
+/** Applique la langue choisie ('auto' = langue de l'appareil), sans recharger la page. */
 export async function applyLanguage(setting = 'auto') {
   const want = CODES.includes(setting) ? setting : deviceLang();
-  if (want === lang) { applied = true; return; }
-  if (applied && lang !== 'fr') { location.reload(); return; } // les textes déjà traduits repartent du français
+  if (want === lang && applied) return;
   applied = true;
   let d = null;
   if (want !== 'fr' && want !== 'en') {
@@ -66,12 +82,12 @@ export async function applyLanguage(setting = 'auto') {
   document.documentElement.lang = lang;
   document.documentElement.dir = LANGS.find((l) => l[0] === lang)?.[2] ? 'rtl' : 'ltr';
   if (observer) { observer.disconnect(); observer = null; }
+  translateNode(document.body); // retraduit tout depuis le français (ou revient au français)
   if (lang === 'fr') return;
-  translateNode(document.body);
   observer = new MutationObserver((list) => {
     for (const m of list) {
       if (m.type === 'characterData') translateNode(m.target);
-      else if (m.type === 'attributes') { const v = m.target.getAttribute(m.attributeName); if (v) { const t = tr(v); if (t !== v) m.target.setAttribute(m.attributeName, t); } }
+      else if (m.type === 'attributes') translateNode(m.target);
       else for (const n of m.addedNodes) translateNode(n);
     }
   });

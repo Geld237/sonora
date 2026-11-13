@@ -167,6 +167,25 @@ class Player extends EventTarget {
 
   next(auto = false) {
     if (!this.queue.length) return;
+    // Lecture automatique écran verrouillé : on passe les titres qui ne peuvent pas jouer en arrière-plan
+    if (auto && this.canPlayHidden) {
+      const start = this.index;
+      let found = -1;
+      for (let k = 0; k < this.queue.length; k++) {
+        if (this.nextIndex(true) < 0) { this.index = start; this.emit('change'); return; } // fin de la file : on reste sur le dernier titre joué
+        if (this.canPlayHidden(this.queue[this.index])) { found = this.index; break; }
+        if (this.index === start) break;
+      }
+      if (found < 0) { this.index = start; this.el.pause(); this.emit('change'); this.emit('state'); return; }
+      this.load(true);
+      return;
+    }
+    if (this.nextIndex(auto) < 0) return;
+    this.load(true);
+  }
+
+  /** Avance l'index (aléatoire, suivant, retour au début) ; -1 si la file est finie. */
+  nextIndex(auto) {
     if (this.shuffle && this.queue.length > 1) {
       let i;
       do { i = Math.floor(Math.random() * this.queue.length); } while (i === this.index);
@@ -179,9 +198,9 @@ class Player extends EventTarget {
       this.el.pause();
       this.emit('state');
       this.emit('queueend'); // fin de la file d'attente (lecture continue : radio du dernier titre)
-      return;
+      return -1;
     }
-    this.load(true);
+    return this.index;
   }
 
   /* ---------- Fondu enchaîné (fichiers de l'appareil) ---------- */

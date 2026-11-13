@@ -211,6 +211,10 @@ export const EN = {
   'Règle (mode soirée)': 'Rule (party mode)', 'Compétition : points de rapidité': 'Competition: speed points', 'Le premier qui trouve': 'First to find it', 'Votre équipe': 'Your team',
   'Réponse enregistrée': 'Answer saved', 'Le premier qui trouve marque le point': 'The first to find it scores', 'Répondez : ici ou sur vos téléphones': 'Answer here or on your phones', 'Trop tard': 'Too late',
   'a trouvé en premier': 'found it first', 'Personne n\'a trouvé': 'Nobody found it', 'personne n\'a trouvé': 'nobody found it',
+  // 1.12 : sources mélangées, arrière-plan
+  'Les titres récents et populaires, clips et artistes indépendants, par style, humeur ou moment de la journée, sans publicité.': 'Recent and popular tracks, videos and independent artists, by style, mood or time of day, without ads.',
+  'Dans un navigateur, Enora ne peut pas retirer les publicités de YouTube. Les titres d\'artistes indépendants n\'en ont aucune (leur fiche « Infos » l\'indique).': 'In a browser, Enora cannot remove YouTube ads. Tracks by independent artists have none (their “Info” sheet says so).',
+  'Les clips YouTube ne répondent pas pour le moment : seuls les titres d\'artistes indépendants sont affichés.': 'YouTube videos are not responding right now: only independent artists\' tracks are shown.',
 };
 
 // Phrases avec une partie variable

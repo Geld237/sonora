@@ -21,6 +21,12 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.12.0
+- **Lecture en arrière-plan et écran verrouillé** : titres indépendants, radios, podcasts et fichiers continuent de jouer, avec les commandes sur l'écran de verrouillage et le casque. Android : service de lecture avec notification (`PlaybackService.java`) ; iPhone : mode audio en arrière-plan. Les clips YouTube se mettent en pause, car les règles de YouTube interdisent la lecture de son lecteur en arrière-plan ; la lecture automatique passe alors aux titres suivants qui peuvent jouer.
+- **Musique : une seule liste** qui mélange clips (YouTube) et artistes indépendants (Audius) ; la fiche « Infos du titre » indique la source. Si YouTube ne répond pas, les titres indépendants s'affichent quand même.
+- **Réglages et Infos dans le même onglet** (Infos devient un sous-onglet des Réglages ; le raccourci vers les Réglages dans la Bibliothèque est retiré).
+- **Changer de langue n'arrête plus la musique** (la page n'est plus rechargée).
+
 ## Nouveautés 1.11.0
 - **Blind test en soirée** : l'organisateur joue aussi (il répond sur son appareil) ; deux règles au choix, « Compétition » (points de rapidité) ou « Le premier qui trouve ».
 - **Téléphone** : glisser sur le titre (barre de lecture ou lecteur) pour passer au titre suivant ou précédent.

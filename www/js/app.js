@@ -12,7 +12,7 @@ import qrcode from './qrcode.js';
 import { canVote, knownVotes, getVotes, vote as voteAI } from './aivotes.js';
 import { newCode, cleanCode, myId, hostWrite, hostClose, hostPlayers, readParty, playerWrite, playerLeave } from './party.js';
 import { getProfile, getProfileName, setProfileName, cleanName, randomName, ensureProfileName } from './profile.js';
-import { AUDIUS_GENRES, audiusTrending, audiusSearch, audiusMood } from './audius.js';
+import { audiusTrending, audiusSearch, audiusMood } from './audius.js';
 import * as cloud from './cloud.js';
 import { BUILD } from './build-info.js';
 import { I, ic } from './icons.js';
@@ -587,6 +587,7 @@ let current = { name: 'library', params: {} };
 const cache = { music: null, films: null, radio: null, pod: null, feeds: null };
 
 function go(name, params = {}) {
+  if (name === 'about') { settingsTab = 'about'; name = 'settings'; } // Infos fait partie des Réglages
   if (game && name !== 'game') { if (game.mode === 'guest' || (game.mode === 'host' && game.phase !== 'end')) { if (!window.confirm(tr('Quitter la partie en cours ?'))) return; } abortGame(); } // quitter l'onglet arrête la partie
   current = { name, params };
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === (params.tab || name)));
@@ -701,7 +702,7 @@ async function viewLibrary() {
         </div>`).join('')}</div>` : `<div class="empty"><div class="big">${I.music}</div>Créez votre première playlist.</div>`}`;
   }
 
-  view.innerHTML = `<div class="h1row"><h1>Bibliothèque</h1><span style="display:flex;gap:4px"><button class="icon-btn" id="open-search" title="Rechercher (Ctrl+K)">${I.search}</button><button class="icon-btn" id="open-settings" title="Réglages">${I.settings}</button></span></div><p class="sub">Votre musique, vos vidéos, vos favoris — toujours sans publicité.</p>${seg}${body}`;
+  view.innerHTML = `<div class="h1row"><h1>Bibliothèque</h1><span style="display:flex;gap:4px"><button class="icon-btn" id="open-search" title="Rechercher (Ctrl+K)">${I.search}</button></span></div><p class="sub">Votre musique, vos vidéos, vos favoris — toujours sans publicité.</p>${seg}${body}`;
 
   view.querySelectorAll('[data-lib]').forEach((b) => (b.onclick = () => { libTab = b.dataset.lib; render(); }));
   const hc = $('#hist-clear');
@@ -710,7 +711,6 @@ async function viewLibrary() {
   const rc = $('#open-recap'); if (rc) rc.onclick = () => openRecap();
   const oc = $('#open-cloud'); if (oc) oc.onclick = () => openRecap('month', 'cloud');
   const ip = $('#imp-pl'); if (ip) ip.onclick = () => openImportModal();
-  $('#open-settings').onclick = () => go('settings', { tab: isMobile ? 'library' : 'settings' });
   view.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { libFilter = b.dataset.filter; render(true); }));
   bindCards();
   const imp = $('#import-btn', view);
@@ -1699,44 +1699,65 @@ function fmtCount(n) {
   return String(n);
 }
 
+/* Musique : les clips (YouTube) et les artistes indépendants (Audius) sont mélangés dans les mêmes listes.
+   La fiche « Infos du titre » indique la source de chaque titre. */
+const AUDIUS_FOR_CAT = {
+  'Afro': [null, 'afro'], 'Rap & Hip-hop': ['Hip-Hop/Rap'], 'Pop & Variété': ['Pop'], 'R&B & Soul': ['R&B/Soul'], 'Caraïbes': ['Reggae'],
+  'Latino': ['Latin'], 'Électro': ['Electronic'], 'Gospel': [null, 'gospel'], 'Musiques du monde': ['World'], 'Jazz, Blues & Classique': ['Jazz'], 'Rock & Métal': ['Rock'],
+};
+/** Titres indépendants correspondant à ce qui est affiché (rien pour « Pour vous » et les époques). */
+function audiusFor(y, th) {
+  if (y.mode === 'search') return audiusSearch(y.term);
+  if (y.mode === 'trend') return audiusTrending('', 'month');
+  if (y.mode === 'new') return audiusTrending('', 'week');
+  if (y.mode === 'genre') return audiusSearch(y.genre);
+  if (y.mode === 'cat') { const [g, q] = AUDIUS_FOR_CAT[y.cat] || [null, y.cat]; return g ? audiusTrending(g, 'month') : audiusSearch(q); }
+  if (y.mode === 'theme' && th?.[2]?.length) return audiusMood(th[2], th[1][1]);
+  return Promise.resolve([]);
+}
+/** Un titre indépendant tous les 4 titres ; s'il n'y a plus de clips, les titres indépendants restants suivent. */
+function mixSources(yt, au) {
+  const out = [];
+  let i = 0, j = 0;
+  const audius = au.slice(0, 24);
+  while (i < yt.length || j < audius.length) {
+    if (((out.length + 1) % 4 === 0 && j < audius.length) || i >= yt.length) out.push(audius[j++]);
+    else out.push(yt[i++]);
+  }
+  return out;
+}
+
 async function viewMusic(_p, seq) {
   const s = cache.music || (cache.music = {});
-  const y = s.yt || (s.yt = { src: 'yt', mode: 'trend', group: 'style', cat: '', genre: '', theme: '', agenre: '', term: '', items: null, error: null });
+  const y = s.yt || (s.yt = { mode: 'trend', group: 'style', cat: '', genre: '', theme: '', term: '', items: null, error: null });
   y.region = 'WW'; // la musique est organisée par style, plus par pays
   const a = getAudioOnly();
-  const au = y.src === 'audius';
-  if (au && !['trend', 'theme', 'search'].includes(y.mode)) y.mode = 'trend';
-  if (au && y.mode === 'theme' && y.group === 'era') y.mode = 'trend';
-  const agName = (AUDIUS_GENRES.find((g) => g[1] === y.agenre) || AUDIUS_GENRES[0])[0];
-  const title = { foryou: 'Pour vous', trend: au ? (y.agenre ? `Tendances · ${agName}` : 'Tendances de la semaine') : 'Tendances', new: 'Nouveautés', cat: y.cat, genre: y.genre, theme: y.theme, search: `Résultats pour « ${y.term} »` }[y.mode];
+  const title = { foryou: 'Pour vous', trend: 'Tendances', new: 'Nouveautés', cat: y.cat, genre: y.genre, theme: y.theme, search: `Résultats pour « ${y.term} »` }[y.mode];
   const subs = subsOf(y.cat);
-  const browsing = ['cat', 'genre', 'theme'].includes(y.mode) || (au && y.mode === 'trend');
-  const groups = au ? [['style', 'Style'], ['mood', 'Humeur'], ['moment', 'Moment'], ['activity', 'Activité']] : [['style', 'Style'], ['mood', 'Humeur'], ['moment', 'Moment'], ['activity', 'Activité'], ['era', 'Époque']];
+  const browsing = ['cat', 'genre', 'theme'].includes(y.mode);
+  const groups = [['style', 'Style'], ['mood', 'Humeur'], ['moment', 'Moment'], ['activity', 'Activité'], ['era', 'Époque']];
   const groupChips = y.group === 'style'
-    ? (au
-      ? AUDIUS_GENRES.map(([l, g]) => `<button class="chip ${y.mode === 'trend' && y.agenre === g ? 'active' : ''}" data-ag="${esc(g)}">${esc(l)}</button>`).join('')
-      : MUSIC_CATEGORIES.map(([c]) => `<button class="chip ${y.cat === c && (y.mode === 'cat' || y.mode === 'genre') ? 'active' : ''}" data-yc="${esc(c)}">${esc(c)}</button>`).join(''))
-    : THEMES[y.group][1].filter((t) => !au || t[2].length).map(([n]) => `<button class="chip ${y.mode === 'theme' && y.theme === n ? 'active' : ''}" data-yt="${esc(n)}">${esc(n)}${y.group === 'moment' && n === momentNow() ? ' <span class="now-dot" title="En ce moment"></span>' : ''}</button>`).join('');
+    ? MUSIC_CATEGORIES.map(([c]) => `<button class="chip ${y.cat === c && (y.mode === 'cat' || y.mode === 'genre') ? 'active' : ''}" data-yc="${esc(c)}">${esc(c)}</button>`).join('')
+    : THEMES[y.group][1].map(([n]) => `<button class="chip ${y.mode === 'theme' && y.theme === n ? 'active' : ''}" data-yt="${esc(n)}">${esc(n)}${y.group === 'moment' && n === momentNow() ? ' <span class="now-dot" title="En ce moment"></span>' : ''}</button>`).join('');
   view.innerHTML = `<h1>Musique</h1>
-    <p class="sub">${au ? 'Des artistes indépendants du monde entier, en écoute complète et sans publicité (Audius).' : 'Les titres récents et populaires, par style, humeur ou moment de la journée, sans publicité.'}</p>
+    <p class="sub">Les titres récents et populaires, clips et artistes indépendants, par style, humeur ou moment de la journée, sans publicité.</p>
     <form class="searchbar" id="ysf">
       <input id="ysq" placeholder="Titre, artiste… (ajoutez -mot pour exclure)" value="${esc(y.raw || (y.mode === 'search' ? y.term : ''))}" />
       <button class="btn">Rechercher</button></form>
     <div class="music-bar">
-      <div class="seg"><button data-src="yt" class="${au ? '' : 'active'}">Clips</button><button data-src="audius" class="${au ? 'active' : ''}">Indépendants</button></div>
-      ${au ? '' : `<div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">${ic('video', 'Vidéo')}</button><button data-mode="audio" class="${a ? 'active' : ''}">${ic('headphones', 'Audio seul')}</button></div>
-      <button class="pill ${showMixes() ? 'on' : ''}" id="mix-toggle" title="Afficher ou masquer les compilations et les mix">${showMixes() ? I.check : ''}<span>Compilations et mix</span></button>`}
+      <div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">${ic('video', 'Vidéo')}</button><button data-mode="audio" class="${a ? 'active' : ''}">${ic('headphones', 'Audio seul')}</button></div>
+      <button class="pill ${showMixes() ? 'on' : ''}" id="mix-toggle" title="Afficher ou masquer les compilations et les mix">${showMixes() ? I.check : ''}<span>Compilations et mix</span></button>
     </div>
-    ${platform === 'web' && !au && !localStorage.getItem(AD_TIP_KEY) ? `<div class="ad-tip"><div><b>Publicités des clips</b><p class="muted small">Dans un navigateur, Enora ne peut pas retirer les publicités de YouTube. La source « Indépendants » n'en a aucune.</p>${webAdTipHtml()}</div><button class="icon-btn" id="ad-tip-close" title="Fermer">${I.close || '×'}</button></div>` : ''}
+    ${platform === 'web' && !localStorage.getItem(AD_TIP_KEY) ? `<div class="ad-tip"><div><b>Publicités des clips</b><p class="muted small">Dans un navigateur, Enora ne peut pas retirer les publicités de YouTube. Les titres d'artistes indépendants n'en ont aucune (leur fiche « Infos » l'indique).</p>${webAdTipHtml()}</div><button class="icon-btn" id="ad-tip-close" title="Fermer">${I.close || '×'}</button></div>` : ''}
     <div class="chips catchips">
-      ${au ? '' : `<button class="chip ${y.mode === 'foryou' ? 'active' : ''}" data-ym="foryou">${ic('sparkle', 'Pour vous')}</button>`}
-      <button class="chip ${y.mode === 'trend' && !y.agenre ? 'active' : ''}" data-ym="trend">Tendances</button>
-      ${au ? '' : `<button class="chip ${y.mode === 'new' ? 'active' : ''}" data-ym="new">Nouveautés</button>`}
+      <button class="chip ${y.mode === 'foryou' ? 'active' : ''}" data-ym="foryou">${ic('sparkle', 'Pour vous')}</button>
+      <button class="chip ${y.mode === 'trend' ? 'active' : ''}" data-ym="trend">Tendances</button>
+      <button class="chip ${y.mode === 'new' ? 'active' : ''}" data-ym="new">Nouveautés</button>
       <span class="chip-sep"></span>
       ${groups.map(([g, l]) => `<button class="chip group ${browsing && y.group === g ? 'active' : ''}" data-grp="${g}">${l}</button>`).join('')}
     </div>
     ${browsing ? `<div class="chips subchips">${groupChips}</div>` : ''}
-    ${!au && subs.length && (y.mode === 'cat' || y.mode === 'genre') ? `<div class="chips subchips">
+    ${subs.length && (y.mode === 'cat' || y.mode === 'genre') ? `<div class="chips subchips">
       <button class="chip ${y.mode === 'cat' ? 'active' : ''}" data-yc="${esc(y.cat)}">Tout ${esc(y.cat)}</button>
       ${subs.map((g) => `<button class="chip ${y.mode === 'genre' && y.genre === g ? 'active' : ''}" data-yg="${esc(g)}">${esc(g)}</button>`).join('')}
     </div>` : ''}
@@ -1746,7 +1767,6 @@ async function viewMusic(_p, seq) {
 `;
 
   const reload = () => { y.items = null; y.page = 0; render(true); };
-  view.querySelectorAll('[data-src]').forEach((b) => (b.onclick = () => { if (y.src === b.dataset.src) return; y.src = b.dataset.src; if (y.mode !== 'search') { y.mode = 'trend'; y.agenre = ''; } reload(); }));
   view.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => {
     if (b.dataset.mode === 'video' && dataSaverActive()) { toast('Économie de données active : audio seul (Réglages → Lecture)', 4000); return; }
     setAudioOnly(b.dataset.mode === 'audio'); updateNowPlaying(); render(true);
@@ -1755,20 +1775,17 @@ async function viewMusic(_p, seq) {
   if (atc) atc.onclick = () => { try { localStorage.setItem(AD_TIP_KEY, '1'); } catch (_) {} atc.parentElement.remove(); };
   const mt = $('#mix-toggle');
   if (mt) mt.onclick = () => { setSetting('showMixes', showMixes() ? 'off' : 'on'); cloud.touch(); toast(showMixes() ? 'Compilations et mix affichés' : 'Compilations et mix masqués'); render(true); };
-  view.querySelectorAll('[data-ym]').forEach((b) => (b.onclick = () => { y.mode = b.dataset.ym; y.agenre = ''; reload(); }));
+  view.querySelectorAll('[data-ym]').forEach((b) => (b.onclick = () => { y.mode = b.dataset.ym; reload(); }));
   view.querySelectorAll('[data-grp]').forEach((b) => (b.onclick = () => {
     y.group = b.dataset.grp;
-    if (y.group === 'style') {
-      if (au) { y.mode = 'trend'; if (!y.agenre) y.agenre = AUDIUS_GENRES[1][1]; }
-      else { y.mode = y.genre && subsOf(y.cat).includes(y.genre) ? 'genre' : 'cat'; if (!y.cat) y.cat = MUSIC_CATEGORIES[0][0]; }
-    } else {
+    if (y.group === 'style') { y.mode = y.genre && subsOf(y.cat).includes(y.genre) ? 'genre' : 'cat'; if (!y.cat) y.cat = MUSIC_CATEGORIES[0][0]; }
+    else {
       y.mode = 'theme';
-      const list = THEMES[y.group][1].filter((t) => !au || t[2].length);
+      const list = THEMES[y.group][1];
       if (!list.some((t) => t[0] === y.theme)) y.theme = y.group === 'moment' ? momentNow() : list[0][0];
     }
     reload();
   }));
-  view.querySelectorAll('[data-ag]').forEach((b) => (b.onclick = () => { y.mode = 'trend'; y.group = 'style'; y.agenre = b.dataset.ag; reload(); }));
   view.querySelectorAll('[data-yt]').forEach((b) => (b.onclick = () => { y.mode = 'theme'; y.theme = b.dataset.yt; reload(); }));
   view.querySelectorAll('[data-yc]').forEach((b) => (b.onclick = () => { y.mode = 'cat'; y.group = 'style'; y.cat = b.dataset.yc; reload(); }));
   view.querySelectorAll('[data-yg]').forEach((b) => (b.onclick = () => { y.mode = 'genre'; y.genre = b.dataset.yg; reload(); }));
@@ -1782,15 +1799,21 @@ async function viewMusic(_p, seq) {
   };
 
   const th = themeOf(y.group, y.theme);
-  const loadYt = y.items ? Promise.resolve(y.items) : (au
-    ? (y.mode === 'search' ? audiusSearch(y.term) : y.mode === 'theme' && th ? audiusMood(th[2], th[1][1]) : audiusTrending(y.agenre))
-    : (y.mode === 'foryou' ? forYou()
-      : y.mode === 'trend' ? ytTrending(y.region)
-      : y.mode === 'new' ? ytNewReleases(y.region)
-      : y.mode === 'genre' ? ytStyle('WW', y.genre)
-      : y.mode === 'cat' ? ytCategory(y.cat, subsOf(y.cat))
-      : y.mode === 'theme' && th ? ytTheme(`${y.group}.${y.theme}`, th[1])
-      : ytSearch(y.term, y.region)));
+  const ytLoad = y.mode === 'foryou' ? forYou()
+    : y.mode === 'trend' ? ytTrending(y.region)
+    : y.mode === 'new' ? ytNewReleases(y.region)
+    : y.mode === 'genre' ? ytStyle('WW', y.genre)
+    : y.mode === 'cat' ? ytCategory(y.cat, subsOf(y.cat))
+    : y.mode === 'theme' && th ? ytTheme(`${y.group}.${y.theme}`, th[1])
+    : ytSearch(y.term, y.region);
+  // Les deux sources en parallèle : si l'une ne répond pas, l'autre suffit
+  const loadYt = y.items ? Promise.resolve(y.items) : Promise.allSettled([ytLoad, audiusFor(y, th)]).then(([yr, ar]) => {
+    const yt = yr.status === 'fulfilled' ? yr.value : [];
+    const au = ar.status === 'fulfilled' ? ar.value : [];
+    if (!yt.length && !au.length && yr.status === 'rejected') throw yr.reason;
+    y.ytDown = yr.status === 'rejected';
+    return mixSources(yt, au);
+  });
 
   const showYt = (all) => {
     const res = $('#res');
@@ -1798,14 +1821,14 @@ async function viewMusic(_p, seq) {
     let items = filterResults(all, y.exclude || []);
     // Compilations et mix masqués, sauf si l'option est activée ou si l'on en cherche explicitement
     let hiddenMixes = 0;
-    if (!au && !showMixes() && !(y.mode === 'search' && MIX_RE.test(y.term))) {
+    if (!showMixes() && !(y.mode === 'search' && MIX_RE.test(y.term))) {
       const kept = items.filter((t) => !isMix(t));
       hiddenMixes = items.length - kept.length;
       if (kept.length >= 5 || !items.length) items = kept; else hiddenMixes = 0;
     }
     refreshMusicList = () => showYt(all);
     const styleNow = y.mode === 'genre' ? y.genre : y.mode === 'cat' ? y.cat : y.mode === 'theme' ? y.theme : '';
-    if (styleNow && !au) for (const t of all) t.style = styleNow; // sert aux suggestions et à la radio d'un titre
+    if (styleNow) for (const t of all) if (t.kind === 'youtube') t.style = styleNow; // sert aux suggestions et à la radio d'un titre
     if (!items.length) {
       res.innerHTML = y.mode === 'foryou'
         ? `<div class="empty"><div class="big">${I.sparkle}</div>Écoutez quelques titres : vos suggestions apparaîtront ici.<br>Elles sont calculées sur cet appareil, à partir de votre historique et de vos favoris.</div>`
@@ -1824,7 +1847,7 @@ async function viewMusic(_p, seq) {
         ${Array.from({ length: pages }, (_, i) => `<button class="pg ${i === y.page ? 'on' : ''}" data-pg="${i}">${i + 1}</button>`).join('')}
         <button class="pg" data-pg="${y.page + 1}" ${y.page === pages - 1 ? 'disabled' : ''} title="Page suivante">${I.chevronRight}</button>
         <span class="pg-info">${start + 1}–${start + shown.length} sur ${items.length}</span></nav>` : '';
-    res.innerHTML = trackRows(shown, { ranked: true, hideable: true, rankStart: start, meta: true }) + pager
+    res.innerHTML = (y.ytDown ? '<p class="muted small">Les clips YouTube ne répondent pas pour le moment : seuls les titres d\'artistes indépendants sont affichés.</p>' : '') + trackRows(shown, { ranked: true, hideable: true, rankStart: start, meta: true }) + pager
       + (hiddenMixes ? `<p class="muted small mix-note">${hiddenMixes} compilation(s) ou mix masqué(s). <button class="linklike" id="mix-show">Les afficher</button></p>` : '');
     const ms = $('#mix-show');
     if (ms) ms.onclick = () => { setSetting('showMixes', 'on'); cloud.touch(); render(true); };
@@ -1835,13 +1858,13 @@ async function viewMusic(_p, seq) {
     }));
     $('#yt-playall').disabled = false;
     $('#yt-shuffle').disabled = false;
-    $('#yt-playall').onclick = () => { player.shuffle = false; if (ytDirect(items, 0)) return; player.playList(items, 0); if (!au && !getAudioOnly()) openNowPlaying(); };
-    $('#yt-shuffle').onclick = () => { player.shuffle = true; const r = Math.floor(Math.random() * items.length); if (ytDirect(items, r)) return; player.playList(items, r); if (!au && !getAudioOnly()) openNowPlaying(); };
+    $('#yt-playall').onclick = () => { player.shuffle = false; if (ytDirect(items, 0)) return; player.playList(items, 0); if (items[0].kind === 'youtube' && !getAudioOnly()) openNowPlaying(); };
+    $('#yt-shuffle').onclick = () => { player.shuffle = true; const r = Math.floor(Math.random() * items.length); if (ytDirect(items, r)) return; player.playList(items, r); if (items[r].kind === 'youtube' && !getAudioOnly()) openNowPlaying(); };
   };
 
   await Promise.all([
     loadYt.then((items) => { if (stale(seq)) return; y.items = items; showYt(items); })
-      .catch((e) => { if (stale(seq)) return; y.items = null; const r = $('#res'); if (r) r.innerHTML = au ? `<div class="error">Audius ne répond pas pour le moment. Réessayez plus tard, ou revenez aux clips.<br><span class="small">(${esc(e.message || e)})</span></div>` : errorHtml(e); }),
+      .catch((e) => { if (stale(seq)) return; y.items = null; const r = $('#res'); if (r) r.innerHTML = errorHtml(e); }),
   ]);
 }
 
@@ -2658,7 +2681,8 @@ function webAdTipHtml() {
 const AD_TIP_KEY = 'sonora.adtip.closed';
 
 let settingsTab = 'account';
-const SETTINGS_TABS = [['account', 'Compte'], ['look', 'Apparence'], ['play', 'Lecture'], ['sources', 'Sources'], ['data', 'Données']];
+const SETTINGS_TABS = [['account', 'Compte'], ['look', 'Apparence'], ['play', 'Lecture'], ['sources', 'Sources'], ['data', 'Données'], ['about', 'Infos']];
+const settingsTabsHtml = () => `<div class="seg set-tabs">${SETTINGS_TABS.map(([k, l]) => `<button data-stab="${k}" class="${settingsTab === k ? 'active' : ''}">${l}</button>`).join('')}</div>`;
 const SETTINGS_BLOCKS = {
   'Compte et synchronisation': 'account', 'Profil': 'account',
   'Apparence et langue': 'look',
@@ -2666,11 +2690,12 @@ const SETTINGS_BLOCKS = {
   'Musique': 'sources', 'Bloqueur de publicités': 'sources', 'YouTube': 'sources', 'Mes sites (Films & TV)': 'sources',
 };
 function viewSettings() {
+  if (settingsTab === 'about') { viewAbout(); return; }
   const st = getSettings();
   const opts = (name, list) => `<div class="opts">${list.map(([v, l, d]) => `<button class="opt ${st[name] === v ? 'active' : ''}" data-set="${name}" data-val="${v}"><b>${l}</b><span>${d}</span></button>`).join('')}</div>`;
   const used = state.media.reduce((n, m) => n + (m.size || 0), 0);
-  view.innerHTML = `${isMobile ? '<button class="back" id="back">${I.chevronLeft}<span>Bibliothèque</span></button>' : ''}<h1>Réglages</h1><p class="sub">Les réglages sont enregistrés sur cet appareil et synchronisés avec votre compte.</p>
-    <div class="seg set-tabs">${SETTINGS_TABS.map(([k, l]) => `<button data-stab="${k}" class="${settingsTab === k ? 'active' : ''}">${l}</button>`).join('')}</div>
+  view.innerHTML = `<h1>Réglages</h1><p class="sub">Les réglages sont enregistrés sur cet appareil et synchronisés avec votre compte.</p>
+    ${settingsTabsHtml()}
     ${accountBlockHtml()}
     ${profileBlockHtml()}
 
@@ -2835,7 +2860,7 @@ function viewSettings() {
    ========================================================================= */
 function viewAbout() {
   const repo = BUILD.repo || 'Geld237/sonora';
-  view.innerHTML = `
+  view.innerHTML = `<h1>Réglages</h1>${settingsTabsHtml()}
     <div class="about-hero"><span class="logo">${I.logo}</span>
       <div><h1>Enora</h1><div class="muted">Version ${esc(currentVersion())} · Musique, films et radio, sans publicité</div></div>
     </div>
@@ -2890,6 +2915,7 @@ function viewAbout() {
       <p>YouTube (lecteur officiel et API YouTube Data) · Internet Archive (films et musique du domaine public) · Audius (artistes indépendants) · Radio Browser (annuaire libre des radios) · LRCLIB (paroles) · annuaire de podcasts d'Apple · Firebase (comptes).
       Enora n'est affiliée à aucun de ces services.</p>
     </div>`;
+  view.querySelectorAll('[data-stab]').forEach((b) => (b.onclick = () => { settingsTab = b.dataset.stab; render(); }));
 }
 
 /* =========================================================================
@@ -3189,10 +3215,48 @@ player.addEventListener('state', () => {
   }
 });
 player.addEventListener('time', () => { updateTime(); if (lyricsState.timed) syncLyrics(player.el.currentTime || 0); savePodcastPosition(); });
+/* ---------- Lecture en arrière-plan et écran verrouillé (téléphones) ----------
+   Titres indépendants, radios, podcasts et fichiers continuent quand l'écran est verrouillé, avec les commandes sur l'écran
+   de verrouillage. Le lecteur YouTube, lui, n'a pas le droit de jouer en arrière-plan (règles de YouTube) : il se met en pause,
+   et la lecture automatique passe aux titres suivants qui peuvent jouer. */
+const phoneLike = isMobile || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+player.canPlayHidden = (t) => !(phoneLike && document.hidden && t?.kind === 'youtube');
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden || !phoneLike) return;
+  if (player.current?.kind === 'youtube' && player.playing) player.el.pause();
+  syncBackgroundService();
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncBackgroundService(); });
+// Android : service de lecture (notification, écran de verrouillage, casque Bluetooth) pour que le système ne coupe pas le son
+const bgPlugin = platform === 'android' && window.Capacitor?.registerPlugin ? window.Capacitor.registerPlugin('YouTubeAdblock') : null;
+let bgSig = '';
+function syncBackgroundService() {
+  if (!bgPlugin) return;
+  const t = player.current;
+  // Un clip YouTube ne garde pas le service actif, sauf pendant la pause automatique écran verrouillé (pour enchaîner ensuite)
+  const yt = t?.kind === 'youtube';
+  const active = !!t && !gameActive() && (!yt || document.hidden);
+  const playing = active && !yt && player.playing;
+  const sig = JSON.stringify([active, playing, t?.title, t?.artist]);
+  if (sig === bgSig) return;
+  bgSig = sig;
+  const call = active ? bgPlugin.setNowPlaying({ title: t.title || 'Enora', artist: t.artist || '', playing }) : bgPlugin.stopPlayback();
+  call.catch(() => {});
+}
+bgPlugin?.addListener('mediaAction', ({ action }) => {
+  if (action === 'play' && player.current?.kind === 'youtube' && document.hidden) player.next(true); // passe au titre suivant qui peut jouer
+  else if (action === 'play' && player.el.paused) player.toggle();
+  else if (action === 'pause' && !player.el.paused) player.toggle();
+  else if (action === 'next') player.next();
+  else if (action === 'prev') player.prev();
+});
+player.addEventListener('state', syncBackgroundService);
+player.addEventListener('change', syncBackgroundService);
+
 // Lecture continue : à la fin de la file d'attente, on enchaîne sur une radio du dernier titre
 player.addEventListener('queueend', () => {
   const t = player.current;
-  if (gameActive() || getSettings().autoRadio !== 'on' || !t || t.kind !== 'youtube' || navigator.onLine === false || (currentRoom() && !currentRoom().host)) return;
+  if (gameActive() || (phoneLike && document.hidden) || getSettings().autoRadio !== 'on' || !t || t.kind !== 'youtube' || navigator.onLine === false || (currentRoom() && !currentRoom().host)) return;
   startRadio(t, { auto: true });
 });
 
@@ -3267,7 +3331,7 @@ function openRoomModal() {
     const c = modal(`<h3>Écouter à plusieurs</h3><p class="muted">Plusieurs personnes écoutent le même titre au même moment, chacune sur son appareil. Il faut être connecté à son compte Enora.</p>
       <div class="modal-actions"><button class="btn ghost" id="rm-close">Fermer</button><button class="btn" id="rm-login">Se connecter</button></div>`);
     $('#rm-close', c).onclick = closeModal;
-    $('#rm-login', c).onclick = () => { closeModal(); closeNowPlaying(); go('settings', { tab: isMobile ? 'library' : 'settings' }); };
+    $('#rm-login', c).onclick = () => { closeModal(); closeNowPlaying(); settingsTab = 'account'; go('settings'); };
     return;
   }
   const fail = (e) => {

@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Lecture en arrière-plan : service de lecture, notification, écran éteint -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application>
+        <service
+            android:name="com.sonora.youtubeadblock.PlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
         <activity
             android:name="com.sonora.youtubeadblock.AdblockWebActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"
