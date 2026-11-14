@@ -2595,6 +2595,29 @@ function updateBanner() {
     toast(platform === 'android' ? 'Ouvrez le fichier téléchargé pour installer la mise à jour.' : platform === 'ios' ? 'Téléchargez Enora.ipa puis réinstallez-le avec Sideloadly.' : 'Téléchargement de la nouvelle version…', 6000);
   };
   $('#up-x', bar).onclick = () => { if (!u.ready && !u.downloading) skipVersion(u.version); pendingUpdate = null; updateBanner(); };
+  makeDraggable(bar);
+}
+
+/** Le bandeau peut être déplacé en le faisant glisser (sauf sur ses boutons). */
+function makeDraggable(el) {
+  if (el.dataset.drag) return;
+  el.dataset.drag = '1';
+  el.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    const r = el.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('dragging');
+    const move = (ev) => {
+      const x = Math.min(window.innerWidth - r.width - 4, Math.max(4, ev.clientX - dx));
+      const y = Math.min(window.innerHeight - r.height - 4, Math.max(4, ev.clientY - dy));
+      Object.assign(el.style, { left: `${x}px`, top: `${y}px`, right: 'auto', bottom: 'auto' });
+    };
+    const up = () => { el.classList.remove('dragging'); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  });
 }
 
 /** Version web (PWA) : service worker pour l'installation et les mises à jour. */

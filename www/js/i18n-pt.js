@@ -168,6 +168,7 @@ export const DICT = {
   "IA ?": "IA?",
   "Ce titre est-il créé par IA ?": "Esta faixa foi criada com IA?",
   "Aucun avis pour le moment. Votez avec les flèches.": "Ainda sem votos. Vota com as setas.",
+  "Mettre à jour": "Atualizar",
   "Tu reconnais le son ?": "Reconheces a música?",
   "Choisis ta catégorie": "Escolhe a tua categoria",
   "Réglages de la partie": "Definições do jogo",

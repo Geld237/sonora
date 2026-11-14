@@ -168,6 +168,7 @@ export const DICT = {
   "IA ?": "AI？",
   "Ce titre est-il créé par IA ?": "这首歌是 AI 创作的吗？",
   "Aucun avis pour le moment. Votez avec les flèches.": "暂无投票，请用箭头投票。",
+  "Mettre à jour": "更新",
   "Tu reconnais le son ?": "听得出这首歌吗？",
   "Choisis ta catégorie": "选择类别",
   "Réglages de la partie": "游戏设置",

@@ -168,6 +168,7 @@ export const DICT = {
   "IA ?": "ИИ?",
   "Ce titre est-il créé par IA ?": "Этот трек создан ИИ?",
   "Aucun avis pour le moment. Votez avec les flèches.": "Голосов пока нет. Голосуйте стрелками.",
+  "Mettre à jour": "Обновить",
   "Tu reconnais le son ?": "Узнаёшь мелодию?",
   "Choisis ta catégorie": "Выбери категорию",
   "Réglages de la partie": "Настройки игры",

@@ -168,6 +168,7 @@ export const DICT = {
   "IA ?": "AI?",
   "Ce titre est-il créé par IA ?": "এই গান কি AI দিয়ে তৈরি?",
   "Aucun avis pour le moment. Votez avec les flèches.": "এখনো কোনো ভোট নেই। তীর দিয়ে ভোট দিন।",
+  "Mettre à jour": "আপডেট করুন",
   "Tu reconnais le son ?": "গানটা চিনতে পারছ?",
   "Choisis ta catégorie": "বিভাগ বেছে নাও",
   "Réglages de la partie": "খেলার সেটিংস",

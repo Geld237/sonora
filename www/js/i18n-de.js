@@ -168,6 +168,7 @@ export const DICT = {
   "IA ?": "KI?",
   "Ce titre est-il créé par IA ?": "Ist dieser Titel KI-generiert?",
   "Aucun avis pour le moment. Votez avec les flèches.": "Noch keine Stimmen. Stimme mit den Pfeilen ab.",
+  "Mettre à jour": "Aktualisieren",
   "Tu reconnais le son ?": "Erkennst du den Song?",
   "Choisis ta catégorie": "Wähle deine Kategorie",
   "Réglages de la partie": "Spieleinstellungen",

@@ -168,6 +168,7 @@ export const DICT = {
   "IA ?": "ذكاء اصطناعي؟",
   "Ce titre est-il créé par IA ?": "هل هذه الأغنية من إنشاء الذكاء الاصطناعي؟",
   "Aucun avis pour le moment. Votez avec les flèches.": "لا أصوات بعد. صوّت بالأسهم.",
+  "Mettre à jour": "تحديث",
   "Tu reconnais le son ?": "هل تعرف هذه الأغنية؟",
   "Choisis ta catégorie": "اختر فئتك",
   "Réglages de la partie": "إعدادات اللعبة",

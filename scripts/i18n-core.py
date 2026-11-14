@@ -181,6 +181,7 @@ ROWS = [
 ["IA ?","¿IA?","KI?","IA?","AI？","ذكاء اصطناعي؟","AI?","AI?","ИИ?"],
 ["Ce titre est-il créé par IA ?","¿Esta canción está hecha con IA?","Ist dieser Titel KI-generiert?","Esta faixa foi criada com IA?","这首歌是 AI 创作的吗？","هل هذه الأغنية من إنشاء الذكاء الاصطناعي؟","क्या यह गाना AI से बना है?","এই গান কি AI দিয়ে তৈরি?","Этот трек создан ИИ?"],
 ["Aucun avis pour le moment. Votez avec les flèches.","Aún no hay votos. Vota con las flechas.","Noch keine Stimmen. Stimme mit den Pfeilen ab.","Ainda sem votos. Vota com as setas.","暂无投票，请用箭头投票。","لا أصوات بعد. صوّت بالأسهم.","अभी कोई वोट नहीं। तीरों से वोट करें।","এখনো কোনো ভোট নেই। তীর দিয়ে ভোট দিন।","Голосов пока нет. Голосуйте стрелками."],
+["Mettre à jour","Actualizar","Aktualisieren","Atualizar","更新","تحديث","अपडेट करें","আপডেট করুন","Обновить"],
 # --- Jeu
 ["Tu reconnais le son ?","¿Reconoces la canción?","Erkennst du den Song?","Reconheces a música?","听得出这首歌吗？","هل تعرف هذه الأغنية؟","गाना पहचानते हो?","গানটা চিনতে পারছ?","Узнаёшь мелодию?"],
 ["Choisis ta catégorie","Elige tu categoría","Wähle deine Kategorie","Escolhe a tua categoria","选择类别","اختر فئتك","अपनी श्रेणी चुनो","বিভাগ বেছে নাও","Выбери категорию"],

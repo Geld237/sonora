@@ -168,6 +168,7 @@ export const DICT = {
   "IA ?": "AI?",
   "Ce titre est-il créé par IA ?": "क्या यह गाना AI से बना है?",
   "Aucun avis pour le moment. Votez avec les flèches.": "अभी कोई वोट नहीं। तीरों से वोट करें।",
+  "Mettre à jour": "अपडेट करें",
   "Tu reconnais le son ?": "गाना पहचानते हो?",
   "Choisis ta catégorie": "अपनी श्रेणी चुनो",
   "Réglages de la partie": "खेल की सेटिंग्स",

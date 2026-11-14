@@ -215,10 +215,15 @@ export const EN = {
   'Les titres récents et populaires, clips et artistes indépendants, par style, humeur ou moment de la journée, sans publicité.': 'Recent and popular tracks, videos and independent artists, by style, mood or time of day, without ads.',
   'Dans un navigateur, Enora ne peut pas retirer les publicités de YouTube. Les titres d\'artistes indépendants n\'en ont aucune (leur fiche « Infos » l\'indique).': 'In a browser, Enora cannot remove YouTube ads. Tracks by independent artists have none (their “Info” sheet says so).',
   'Les clips YouTube ne répondent pas pour le moment : seuls les titres d\'artistes indépendants sont affichés.': 'YouTube videos are not responding right now: only independent artists\' tracks are shown.',
+  'Mettre à jour': 'Update', 'Plus tard': 'Later', 'Masquer': 'Hide', 'Recharger': 'Reload', 'Redémarrer et installer': 'Restart and install',
+  'Une nouvelle version d\'Enora est disponible.': 'A new version of Enora is available.',
 };
 
 // Phrases avec une partie variable
 export const EN_PATTERNS = [
+  [/^Nouvelle version : Enora (\S+)$/, 'New version: Enora $1'],
+  [/^Enora (\S+) est prête\.$/, 'Enora $1 is ready.'],
+  [/^Téléchargement d'Enora (\S+)…$/, 'Downloading Enora $1…'],
   [/^Listes de filtres à jour du (.*) · (\d+) publicité\(s\) bloquée\(s\) depuis le lancement$/, 'Filter lists updated on $1 · $2 ad(s) blocked since launch'],
   [/^Liste intégrée active \(les listes complètes se chargent à la prochaine connexion\) · (\d+) publicité\(s\) bloquée\(s\) depuis le lancement$/, 'Built-in list active (full lists load at the next connection) · $1 ad(s) blocked since launch'],
   [/^Signalé (\d+) fois comme créé par IA · (\d+) avis contraire\(s\)( · votre vote est compté)?$/, (m, u, d, mine) => `Reported ${u} time(s) as made with AI · ${d} opposing vote(s)${mine ? ' · your vote is counted' : ''}`],
