@@ -21,6 +21,11 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.12.2
+- **Musique** : plus de barre « Vidéo / Audio seul / Compilations » en haut ; les compilations et mix se montrent ou se masquent depuis la ligne en bas de la liste.
+- **Lecteur** : le choix « Vidéo / Audio seul » se fait dans le lecteur, pendant la lecture d'un clip.
+- **Windows et Mac** : les boutons du lecteur et des paroles ne passent plus sous les boutons de la fenêtre (réduire, agrandir, fermer).
+
 ## Nouveautés 1.12.0
 - **Lecture en arrière-plan et écran verrouillé** : titres indépendants, radios, podcasts et fichiers continuent de jouer, avec les commandes sur l'écran de verrouillage et le casque. Android : service de lecture avec notification (`PlaybackService.java`) ; iPhone : mode audio en arrière-plan. Les clips YouTube se mettent en pause, car les règles de YouTube interdisent la lecture de son lecteur en arrière-plan ; la lecture automatique passe alors aux titres suivants qui peuvent jouer.
 - **Musique : une seule liste** qui mélange clips (YouTube) et artistes indépendants (Audius) ; la fiche « Infos du titre » indique la source. Si YouTube ne répond pas, les titres indépendants s'affichent quand même.

@@ -1744,10 +1744,6 @@ async function viewMusic(_p, seq) {
     <form class="searchbar" id="ysf">
       <input id="ysq" placeholder="Titre, artiste… (ajoutez -mot pour exclure)" value="${esc(y.raw || (y.mode === 'search' ? y.term : ''))}" />
       <button class="btn">Rechercher</button></form>
-    <div class="music-bar">
-      <div class="seg"><button data-mode="video" class="${a ? '' : 'active'}">${ic('video', 'Vidéo')}</button><button data-mode="audio" class="${a ? 'active' : ''}">${ic('headphones', 'Audio seul')}</button></div>
-      <button class="pill ${showMixes() ? 'on' : ''}" id="mix-toggle" title="Afficher ou masquer les compilations et les mix">${showMixes() ? I.check : ''}<span>Compilations et mix</span></button>
-    </div>
     ${platform === 'web' && !localStorage.getItem(AD_TIP_KEY) ? `<div class="ad-tip"><div><b>Publicités des clips</b><p class="muted small">Dans un navigateur, Enora ne peut pas retirer les publicités de YouTube. Les titres d'artistes indépendants n'en ont aucune (leur fiche « Infos » l'indique).</p>${webAdTipHtml()}</div><button class="icon-btn" id="ad-tip-close" title="Fermer">${I.close || '×'}</button></div>` : ''}
     <div class="chips catchips">
       <button class="chip ${y.mode === 'foryou' ? 'active' : ''}" data-ym="foryou">${ic('sparkle', 'Pour vous')}</button>
@@ -1767,14 +1763,8 @@ async function viewMusic(_p, seq) {
 `;
 
   const reload = () => { y.items = null; y.page = 0; render(true); };
-  view.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => {
-    if (b.dataset.mode === 'video' && dataSaverActive()) { toast('Économie de données active : audio seul (Réglages → Lecture)', 4000); return; }
-    setAudioOnly(b.dataset.mode === 'audio'); updateNowPlaying(); render(true);
-  }));
   const atc = $('#ad-tip-close');
   if (atc) atc.onclick = () => { try { localStorage.setItem(AD_TIP_KEY, '1'); } catch (_) {} atc.parentElement.remove(); };
-  const mt = $('#mix-toggle');
-  if (mt) mt.onclick = () => { setSetting('showMixes', showMixes() ? 'off' : 'on'); cloud.touch(); toast(showMixes() ? 'Compilations et mix affichés' : 'Compilations et mix masqués'); render(true); };
   view.querySelectorAll('[data-ym]').forEach((b) => (b.onclick = () => { y.mode = b.dataset.ym; reload(); }));
   view.querySelectorAll('[data-grp]').forEach((b) => (b.onclick = () => {
     y.group = b.dataset.grp;
@@ -1848,9 +1838,12 @@ async function viewMusic(_p, seq) {
         <button class="pg" data-pg="${y.page + 1}" ${y.page === pages - 1 ? 'disabled' : ''} title="Page suivante">${I.chevronRight}</button>
         <span class="pg-info">${start + 1}–${start + shown.length} sur ${items.length}</span></nav>` : '';
     res.innerHTML = (y.ytDown ? '<p class="muted small">Les clips YouTube ne répondent pas pour le moment : seuls les titres d\'artistes indépendants sont affichés.</p>' : '') + trackRows(shown, { ranked: true, hideable: true, rankStart: start, meta: true }) + pager
-      + (hiddenMixes ? `<p class="muted small mix-note">${hiddenMixes} compilation(s) ou mix masqué(s). <button class="linklike" id="mix-show">Les afficher</button></p>` : '');
+      + (hiddenMixes ? `<p class="muted small mix-note">${hiddenMixes} compilation(s) ou mix masqué(s). <button class="linklike" id="mix-show">Les afficher</button></p>`
+        : showMixes() ? '<p class="muted small mix-note">Compilations et mix affichés. <button class="linklike" id="mix-hide">Les masquer</button></p>' : '');
     const ms = $('#mix-show');
     if (ms) ms.onclick = () => { setSetting('showMixes', 'on'); cloud.touch(); render(true); };
+    const mh = $('#mix-hide');
+    if (mh) mh.onclick = () => { setSetting('showMixes', 'off'); cloud.touch(); render(true); };
     res.querySelectorAll('[data-pg]').forEach((b) => (b.onclick = () => {
       y.page = +b.dataset.pg;
       showYt(all);
@@ -2965,12 +2958,15 @@ function placeYtHost() {
 npSheet.addEventListener('scroll', placeYtHost);
 npSheet.addEventListener('animationend', placeYtHost);
 window.addEventListener('resize', placeYtHost);
-$('#np-video-toggle').onclick = () => {
-  setAudioOnly(!getAudioOnly());
+// Clip YouTube : vidéo ou audio seul, au choix dans le lecteur
+document.querySelectorAll('[data-npm]').forEach((b) => (b.onclick = () => {
+  const audio = b.dataset.npm === 'audio';
+  if (!audio && dataSaverActive()) { toast('Économie de données active : audio seul. Changez-la dans Réglages → Lecture.', 4500); return; }
+  if (audio === getAudioOnly()) return;
+  setAudioOnly(audio);
   updateNowPlaying();
-  toast(getAudioOnly() ? 'Audio seul' : 'Vidéo affichée');
-  if (current.name === 'music') render(true);
-};
+  toast(audio ? 'Audio seul' : 'Vidéo affichée');
+}));
 
 $('#mini-open').onclick = () => { if (Date.now() - swipedAt > 500) openNowPlaying(); }; // pas d'ouverture juste après un glissement
 $('#np-close').onclick = closeNowPlaying;
@@ -3046,9 +3042,9 @@ function updateNowPlaying() {
   videoElement.classList.toggle('hidden', !isVideo);
   $('#np-yt-slot').classList.toggle('hidden', !showYt);
   $('#np-cover').classList.toggle('hidden', isVideo || showYt);
-  $('#np-video-toggle').classList.toggle('hidden', !isYt);
-  $('#np-video-toggle').innerHTML = getAudioOnly() ? I.video : I.headphones;
-  $('#np-video-toggle').title = getAudioOnly() ? 'Afficher la vidéo' : 'Audio seul';
+  $('#np-mode').classList.toggle('hidden', !isYt);
+  $('#np-mode').previousElementSibling.classList.toggle('hidden', isYt);
+  document.querySelectorAll('[data-npm]').forEach((b) => b.classList.toggle('active', (b.dataset.npm === 'audio') === getAudioOnly()));
   requestAnimationFrame(placeYtHost);
   $('#np-shuffle').classList.toggle('on', player.shuffle);
   $('#np-repeat').classList.toggle('on', player.repeat !== 'off');

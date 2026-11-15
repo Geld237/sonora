@@ -714,3 +714,18 @@ html[data-theme="light"] .lyrics.lyr-full { background: radial-gradient(120% 90%
 @media (max-width: 760px) {
   .update-bar { left: 10px; right: 10px; max-width: none; bottom: calc(var(--mini-h) + var(--tab-h) + 12px + var(--safe-b)); }
 }
+
+/* Lecteur : choix Vidéo / Audio seul (clips YouTube) */
+.np-head { position: relative; }
+.np-head-end { width: 44px; }
+.np-mode { margin: 0; }
+.np-mode button { padding: 6px 14px; font-size: 13px; }
+
+/* Fenêtre sans barre de titre (Windows, Mac) : les boutons de la fenêtre (réduire, agrandir, fermer) sont dessinés
+   par-dessus l'application. Le lecteur et les paroles en plein écran leur laissent la place, et le haut sert à déplacer la fenêtre. */
+body.frameless #np { padding-top: 44px; }
+body.frameless #np::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 44px; -webkit-app-region: drag; z-index: 41; }
+body.frameless .lyrics.lyr-full { padding-top: 56px; }
+body.frameless .lyrics.lyr-full::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 44px; -webkit-app-region: drag; }
+body.frameless #np button, body.frameless #np select, body.frameless #np input, body.frameless .lyr-tools { -webkit-app-region: no-drag; }
+.lyrics.lyr-full { padding-top: calc(22px + var(--safe-t)); padding-bottom: calc(22px + var(--safe-b)); }

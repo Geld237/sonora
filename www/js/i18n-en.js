@@ -217,10 +217,12 @@ export const EN = {
   'Les clips YouTube ne répondent pas pour le moment : seuls les titres d\'artistes indépendants sont affichés.': 'YouTube videos are not responding right now: only independent artists\' tracks are shown.',
   'Mettre à jour': 'Update', 'Plus tard': 'Later', 'Masquer': 'Hide', 'Recharger': 'Reload', 'Redémarrer et installer': 'Restart and install',
   'Une nouvelle version d\'Enora est disponible.': 'A new version of Enora is available.',
+  'Compilations et mix affichés.': 'Compilations and mixes shown.', 'Les masquer': 'Hide them', 'Économie de données active : audio seul. Changez-la dans Réglages → Lecture.': 'Data saver is on: audio only. Change it in Settings → Playback.',
 };
 
 // Phrases avec une partie variable
 export const EN_PATTERNS = [
+  [/^(\d+) compilation\(s\) ou mix masqué\(s\)\.$/, '$1 compilation(s) or mix(es) hidden.'],
   [/^Nouvelle version : Enora (\S+)$/, 'New version: Enora $1'],
   [/^Enora (\S+) est prête\.$/, 'Enora $1 is ready.'],
   [/^Téléchargement d'Enora (\S+)…$/, 'Downloading Enora $1…'],
