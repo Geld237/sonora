@@ -24,6 +24,9 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 ## Nouveautés 1.12.3
 - **iPhone** : source **SideStore** officielle (`enora-source.json`, publiée avec chaque version). Une fois ajoutée dans SideStore, chaque mise à jour d'Enora s'installe d'un toucher, sans ordinateur.
 
+## Nouveautés 1.12.5
+- **Préchargement des titres suivants** (Réglages → Lecture, 2 titres par défaut) : pendant l'écoute, les 2, 3 ou 5 prochains titres Audius, Internet Archive et podcasts sont chargés en mémoire, puis effacés quand ils ne sont plus dans la file. Le passage au titre suivant se fait sans attente, et le fondu enchaîné fonctionne aussi avec eux. En aléatoire, les titres suivants sont tirés au sort à l'avance pour pouvoir être préchargés. Désactivé en économie de données. YouTube n'est pas concerné : ses règles interdisent de récupérer le son à l'avance.
+
 ## Nouveautés 1.12.4
 - **iPhone : la musique joue dans l'application.** Sous l'adresse interne `capacitor://localhost`, YouTube refuse son lecteur intégré (erreur 153) ; Enora ouvrait alors YouTube dans une nouvelle fenêtre et le blind test échouait. Le lecteur officiel est maintenant hébergé par une page relais en https (`www/yt-relay.html`, publiée sur GitHub Pages) que l'application pilote par messages.
 

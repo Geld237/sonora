@@ -7,6 +7,7 @@ const DEFAULTS = {
   eq: 'off',                 // égaliseur (fichiers sur l'appareil)
   normalize: 'off',          // normalisation du volume : on | off
   crossfade: '0',            // fondu enchaîné entre deux fichiers de l'appareil : secondes (0 = désactivé)
+  prefetch: '2',             // titres suivants préchargés (Audius, Archive, podcasts) : 0 | 2 | 3 | 5
   dataSaver: 'auto',         // économie de données : auto (réseau mobile) | on | off
   theme: 'auto',             // auto (comme l'appareil) | dark | light
   lang: 'auto',              // auto | fr | en

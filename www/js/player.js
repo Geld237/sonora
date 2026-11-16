@@ -1,6 +1,7 @@
 // Lecteur audio/vidéo : file d'attente, aléatoire, répétition, minuterie, commandes écran verrouillé.
 import { db } from './db.js';
 import { ytMedia } from './youtube-player.js';
+import { prefetchTracks, prefetched, clearPrefetch } from './prefetch.js';
 
 const audio = document.getElementById('audio-el');
 const video = document.getElementById('video-el');
@@ -79,6 +80,10 @@ class Player extends EventTarget {
     this.volume = 1;
     this.crossfade = 0;            // secondes de fondu enchaîné entre deux fichiers de l'appareil (0 = désactivé)
     this.xf = null;                // fondu en cours
+    this.prefetchCount = 0;        // nombre de titres suivants préchargés (Audius, Archive, podcasts)
+    this.prefetchAllowed = () => true; // l'application le refuse en économie de données
+    this.plan = [];                // aléatoire : titres déjà tirés au sort pour la suite (permet de les précharger)
+    this.addEventListener('change', () => this.refreshPrefetch());
     for (const el of ELEMENTS) {
       el.addEventListener('timeupdate', () => { if (el === this.el) { this.emit('time'); this.maybeCrossfade(); } });
       el.addEventListener('durationchange', () => el === this.el && this.emit('time'));
@@ -100,6 +105,7 @@ class Player extends EventTarget {
   async playList(tracks, start = 0) {
     this.queue = tracks.slice();
     this.index = start;
+    this.plan = [];
     await this.load(true);
   }
 
@@ -121,6 +127,8 @@ class Player extends EventTarget {
     }
     this.queue = [];
     this.index = -1;
+    this.plan = [];
+    clearPrefetch();
     this.emit('change');
     this.emit('state');
   }
@@ -138,6 +146,9 @@ class Player extends EventTarget {
       if (tok !== this.loadTok) return;
       if (rec && rec.blob) { this.objectUrl = URL.createObjectURL(rec.blob); src = this.objectUrl; }
     }
+    // Titre préchargé pendant le précédent : il démarre tout de suite, sans coupure
+    const pre = !this.objectUrl && t.kind === 'audio' && prefetched(t);
+    if (pre) { this.objectUrl = URL.createObjectURL(pre); src = this.objectUrl; }
     // Fichier sur l'appareil -> lecteur avec égaliseur ; sinon lecteur standard
     const local = t.kind === 'audio' && !!this.objectUrl && ensureFx();
     if (local && fx.ctx.state === 'suspended') fx.ctx.resume().catch(() => {});
@@ -187,8 +198,9 @@ class Player extends EventTarget {
   /** Avance l'index (aléatoire, suivant, retour au début) ; -1 si la file est finie. */
   nextIndex(auto) {
     if (this.shuffle && this.queue.length > 1) {
-      let i;
-      do { i = Math.floor(Math.random() * this.queue.length); } while (i === this.index);
+      const p = this.takePlanned();
+      let i = p;
+      if (i < 0) do { i = Math.floor(Math.random() * this.queue.length); } while (i === this.index);
       this.index = i;
     } else if (this.index < this.queue.length - 1) {
       this.index++;
@@ -208,7 +220,7 @@ class Player extends EventTarget {
   peekNext() {
     const n = this.queue.length;
     if (n < 2) return -1;
-    if (this.shuffle) return (this.index + 1 + Math.floor(Math.random() * (n - 1))) % n;
+    if (this.shuffle) { const p = this.plannedIndex(); return p >= 0 ? p : (this.index + 1 + Math.floor(Math.random() * (n - 1))) % n; }
     if (this.index < n - 1) return this.index + 1;
     return this.repeat === 'all' ? 0 : -1;
   }
@@ -222,13 +234,15 @@ class Player extends EventTarget {
     const ni = this.peekNext();
     const nt = this.queue[ni];
     const id = nt && nt.kind === 'audio' && (nt.mediaId || this.offlineIndex.get(nt.key));
-    if (!id) return;
+    const pre = !id && nt && nt.kind === 'audio' && prefetched(nt);
+    if (!id && !pre) return;
     const tok = (this.xf = { pending: true });
-    this.startCrossfade(el, ni, id, rem, tok).catch(() => { if (this.xf === tok) this.xf = null; });
+    if (this.shuffle && this.plannedIndex() === ni) this.plan.shift();
+    this.startCrossfade(el, ni, id ? null : pre, id, rem, tok).catch(() => { if (this.xf === tok) this.xf = null; });
   }
 
-  async startCrossfade(from, ni, id, rem, tok) {
-    const rec = await db.get('blobs', id).catch(() => null);
+  async startCrossfade(from, ni, preBlob, id, rem, tok) {
+    const rec = preBlob ? { blob: preBlob } : await db.get('blobs', id).catch(() => null);
     if (this.xf !== tok) return;
     if (!rec?.blob || this.el !== from || from.paused) { this.xf = null; return; }
     const to = from === audioFx ? audioFx2 : audioFx;
@@ -262,6 +276,48 @@ class Player extends EventTarget {
     this.emit('state');
   }
 
+  /* ---------- Titres à venir (aléatoire planifié + préchargement) ---------- */
+  /** Index du premier titre tiré au sort encore valable, ou -1. */
+  plannedIndex() {
+    while (this.plan.length) {
+      const i = this.queue.indexOf(this.plan[0]);
+      if (i >= 0 && i !== this.index) return i;
+      this.plan.shift();
+    }
+    return -1;
+  }
+  takePlanned() { const i = this.plannedIndex(); if (i >= 0) this.plan.shift(); return i; }
+
+  /** Les n prochains titres en lecture automatique (sans les jouer). */
+  upcoming(n) {
+    const q = this.queue, len = q.length;
+    if (n <= 0 || len < 2 || this.repeat === 'one') return [];
+    if (this.shuffle) {
+      const cur = q[this.index];
+      this.plan = this.plan.filter((t) => t !== cur && q.includes(t));
+      const want = Math.min(n, len - 1);
+      let guard = 0;
+      while (this.plan.length < want && guard++ < 200) {
+        const t = q[Math.floor(Math.random() * len)];
+        if (t !== cur && !this.plan.includes(t)) this.plan.push(t);
+      }
+      return this.plan.slice(0, n);
+    }
+    const out = [];
+    for (let k = 1; k <= Math.min(n, len - 1); k++) {
+      const i = this.index + k;
+      if (i < len) out.push(q[i]);
+      else if (this.repeat === 'all') out.push(q[i - len]);
+      else break;
+    }
+    return out;
+  }
+
+  refreshPrefetch() {
+    if (!this.prefetchCount || !this.current || !this.prefetchAllowed()) { clearPrefetch(); return; }
+    prefetchTracks(this.upcoming(this.prefetchCount), this.current, 4000);
+  }
+
   cancelCrossfade() { if (this.xf?.done) this.xf.done(); this.xf = null; }
 
   prev() {
@@ -280,7 +336,7 @@ class Player extends EventTarget {
 
   setVolume(v) { this.volume = v; if (!this.xf) for (const el of ELEMENTS) el.volume = v; }
 
-  toggleShuffle() { this.shuffle = !this.shuffle; this.emit('change'); }
+  toggleShuffle() { this.shuffle = !this.shuffle; this.plan = []; this.emit('change'); }
   cycleRepeat() { this.repeat = { off: 'all', all: 'one', one: 'off' }[this.repeat]; this.emit('change'); }
 
   setSleep(value) {

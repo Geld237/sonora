@@ -2731,6 +2731,9 @@ function viewSettings() {
       ${opts('autoRadio', [['on', 'Activée', 'À la fin d\'une liste, des titres proches s\'enchaînent'], ['off', 'Désactivée', 'La lecture s\'arrête à la fin de la liste']])}
       <div class="set-row">Paroles automatiques</div>
       ${opts('autoLyrics', [['on', 'Activées', 'Affichées et synchronisées quand elles existent (LRCLIB)'], ['off', 'Désactivées', 'Seulement vos fichiers .lrc']])}
+      <div class="set-row">Précharger les titres suivants</div>
+      <p class="muted small">Évite les coupures : les prochains titres Audius, Internet Archive et podcasts sont chargés pendant l'écoute, gardés en mémoire puis effacés. Désactivé en économie de données. Impossible pour YouTube, dont les règles l'interdisent.</p>
+      ${opts('prefetch', [['0', 'Désactivé', ''], ['2', '2 titres', ''], ['3', '3 titres', ''], ['5', '5 titres', '']])}
       <div class="set-row">Économie de données</div>
       ${opts('dataSaver', [['auto', 'Automatique', 'Sur réseau mobile : audio seul et qualité légère'], ['on', 'Toujours', 'Audio seul et qualité légère'], ['off', 'Jamais', '']])}
       ${dataSaverActive() ? '<p class="muted small" style="margin-top:10px">Économie de données active en ce moment.</p>' : ''}
@@ -3488,10 +3491,15 @@ function applyEffects() {
   const st = getSettings();
   setAudioEffects({ preset: st.eq, normalize: st.normalize === 'on' });
   player.crossfade = parseInt(st.crossfade, 10) || 0;
+  player.prefetchCount = parseInt(st.prefetch, 10) || 0;
+  player.prefetchAllowed = () => !dataSaverActive();
+  player.refreshPrefetch();
   applyTheme();
   applyLanguage(st.lang);
 }
 applyEffects();
+// Passage du Wi-Fi au réseau mobile (ou l'inverse) : le préchargement suit l'économie de données
+(navigator.connection || navigator.webkitConnection)?.addEventListener?.('change', () => player.refreshPrefetch());
 
 /* ---------- Ordinateur : mini-lecteur flottant et touches multimédia du clavier ---------- */
 if (platform === 'electron' && window.sonora?.setMini) {
