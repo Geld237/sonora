@@ -877,7 +877,7 @@ function playClip(answer, onStart, onTick, onFail) {
   }, 200);
 }
 function clipFailed(next) {
-  if (++game.skips > 4) { const m = 'La lecture ne démarre pas. Vérifiez votre connexion, ou jouez avec « Ma bibliothèque ».'; abortGame(); renderGame(m); return; }
+  if (++game.skips > 4) { const m = (game.pool === 'lib' ? 'Les extraits de votre bibliothèque ne démarrent pas. Vérifiez que les titres sont toujours disponibles.' : 'Les extraits ne démarrent pas. Vérifiez votre connexion internet, puis relancez la partie.'); abortGame(); renderGame(m); return; }
   next();
 }
 

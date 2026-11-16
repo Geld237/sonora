@@ -24,6 +24,9 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 ## Nouveautés 1.12.3
 - **iPhone** : source **SideStore** officielle (`enora-source.json`, publiée avec chaque version). Une fois ajoutée dans SideStore, chaque mise à jour d'Enora s'installe d'un toucher, sans ordinateur.
 
+## Nouveautés 1.12.4
+- **iPhone : la musique joue dans l'application.** Sous l'adresse interne `capacitor://localhost`, YouTube refuse son lecteur intégré (erreur 153) ; Enora ouvrait alors YouTube dans une nouvelle fenêtre et le blind test échouait. Le lecteur officiel est maintenant hébergé par une page relais en https (`www/yt-relay.html`, publiée sur GitHub Pages) que l'application pilote par messages.
+
 ## Nouveautés 1.12.2
 - **Musique** : plus de barre « Vidéo / Audio seul / Compilations » en haut ; les compilations et mix se montrent ou se masquent depuis la ligne en bas de la liste.
 - **Lecteur** : le choix « Vidéo / Audio seul » se fait dans le lecteur, pendant la lecture d'un clip.

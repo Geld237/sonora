@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
+<title>Enora · lecteur</title>
+<style>html, body, #p { margin: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }</style>
+</head>
+<body>
+<div id="p"></div>
+<script>
+/* Relais du lecteur YouTube officiel pour l'application iPhone d'Enora.
+   Sur iPhone, l'application tourne sous l'adresse « capacitor://localhost » : YouTube refuse alors son lecteur intégré
+   (erreur 153, aucune adresse d'origine valide). Cette page, servie en https, héberge le lecteur officiel (API IFrame)
+   et reçoit ses commandes de l'application par postMessage. Seules les applications Enora peuvent la piloter. */
+(function () {
+  var ALLOWED = ['capacitor://localhost', 'ionic://localhost', 'https://localhost', 'http://localhost', 'app://sonora'];
+  var parentOrigin = null, player = null, ready = false, timer = null, pending = null, volume = 100;
+  function send(m) { if (parentOrigin) { m.enora = 'yt'; parent.postMessage(m, parentOrigin); } }
+  function tick() {
+    if (!ready) return;
+    try { send({ ev: 'time', t: player.getCurrentTime() || 0, d: player.getDuration() || 0 }); } catch (e) {}
+  }
+  function create() {
+    player = new YT.Player('p', {
+      width: '100%', height: '100%',
+      playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1, controls: 1, fs: 1, iv_load_policy: 3 },
+      events: {
+        onReady: function () {
+          ready = true;
+          try { player.setVolume(volume); } catch (e) {}
+          send({ ev: 'ready' });
+          if (pending) { run(pending); pending = null; }
+        },
+        onStateChange: function (e) {
+          send({ ev: 'state', s: e.data });
+          clearInterval(timer);
+          if (e.data === 1) timer = setInterval(tick, 500);
+          tick();
+        },
+        onError: function (e) { send({ ev: 'error', code: e.data }); },
+      },
+    });
+  }
+  function run(m) {
+    if (!ready) { if (m.cmd === 'load') pending = m; return; }
+    try {
+      if (m.cmd === 'load') { m.play ? player.loadVideoById(String(m.id)) : player.cueVideoById(String(m.id)); }
+      else if (m.cmd === 'play') player.playVideo();
+      else if (m.cmd === 'pause') player.pauseVideo();
+      else if (m.cmd === 'stop') player.stopVideo();
+      else if (m.cmd === 'seek') player.seekTo(+m.t || 0, true);
+      else if (m.cmd === 'volume') { volume = Math.max(0, Math.min(100, Math.round(+m.v))); player.setVolume(volume); }
+    } catch (e) {}
+    tick();
+  }
+  window.addEventListener('message', function (e) {
+    if (e.source !== parent || ALLOWED.indexOf(e.origin) < 0) return;
+    var m = e.data;
+    if (!m || m.enora !== 'yt' || typeof m.cmd !== 'string') return;
+    if (m.cmd === 'load' && !/^[A-Za-z0-9_-]{6,20}$/.test(String(m.id))) return;
+    parentOrigin = e.origin;
+    if (m.cmd === 'hello') { send({ ev: 'hello' }); if (ready) send({ ev: 'ready' }); return; }
+    run(m);
+  });
+  window.onYouTubeIframeAPIReady = create;
+  var s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

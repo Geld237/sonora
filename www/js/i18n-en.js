@@ -218,6 +218,8 @@ export const EN = {
   'Mettre à jour': 'Update', 'Plus tard': 'Later', 'Masquer': 'Hide', 'Recharger': 'Reload', 'Redémarrer et installer': 'Restart and install',
   'Une nouvelle version d\'Enora est disponible.': 'A new version of Enora is available.',
   'Compilations et mix affichés.': 'Compilations and mixes shown.', 'Les masquer': 'Hide them', 'Économie de données active : audio seul. Changez-la dans Réglages → Lecture.': 'Data saver is on: audio only. Change it in Settings → Playback.',
+  'Les extraits de votre bibliothèque ne démarrent pas. Vérifiez que les titres sont toujours disponibles.': 'The clips from your library do not start. Check that the tracks are still available.',
+  'Les extraits ne démarrent pas. Vérifiez votre connexion internet, puis relancez la partie.': 'The clips do not start. Check your internet connection, then start the game again.',
 };
 
 // Phrases avec une partie variable
