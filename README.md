@@ -21,6 +21,9 @@ Lecteur : lecture/pause, suivant/précédent, aléatoire, répétition (tout / u
 
 **Aucune publicité, aucune clé API, aucun compte nécessaire.**
 
+## Nouveautés 1.12.3
+- **iPhone** : source **SideStore** officielle (`enora-source.json`, publiée avec chaque version). Une fois ajoutée dans SideStore, chaque mise à jour d'Enora s'installe d'un toucher, sans ordinateur.
+
 ## Nouveautés 1.12.2
 - **Musique** : plus de barre « Vidéo / Audio seul / Compilations » en haut ; les compilations et mix se montrent ou se masquent depuis la ligne en bas de la liste.
 - **Lecteur** : le choix « Vidéo / Audio seul » se fait dans le lecteur, pendant la lecture d'un clip.
@@ -173,15 +176,23 @@ scripts/setup-ios.js     Copie le script anti-pub dans le plugin + configure Inf
 - **HTML5 Audio/Video**, **Media Session API**, **IndexedDB**
 - **Swift / WebKit** : `WKWebView`, `WKContentRuleList`, `WKUserScript`
 
-## Installer sur iPhone depuis Windows (sans Mac)
+## Installer sur iPhone (gratuit, avec mises à jour)
 
-1. **Compiler sur GitHub (gratuit)** : créez un dépôt GitHub (de préférence **public**, les minutes Mac y sont gratuites), puis envoyez-y tout le contenu du projet, y compris le dossier `.github`. Dans l'onglet **Actions**, ouvrez **Build iOS**, cliquez sur **Run workflow** et attendez 10 à 20 min. Téléchargez ensuite l'artefact **Enora-ipa** et décompressez-le pour obtenir `Enora.ipa`.
-2. **Installer avec Sideloadly** : sur sideloadly.io, téléchargez et installez Sideloadly. Installez aussi **iTunes** et **iCloud** en version « web » (sur apple.com, pas celles du Microsoft Store). Branchez l'iPhone en USB et faites-lui confiance. Glissez `Enora.ipa` dans Sideloadly, entrez votre identifiant Apple, puis cliquez sur **Start**.
-3. **Sur l'iPhone** :
+La méthode recommandée est **SideStore** : un « magasin » installé sur l'iPhone qui renouvelle lui-même la signature et propose les mises à jour d'Enora.
+
+1. **Une seule fois, sur l'ordinateur** : installez **iloader** (github.com/nab138/iloader), branchez l'iPhone en USB, faites-lui confiance, connectez-vous avec votre identifiant Apple et installez **SideStore**. iloader installe aussi **LocalDevVPN** (gratuit, sur l'App Store), dont SideStore a besoin.
+2. **Sur l'iPhone** :
    - activez **Réglages → Confidentialité et sécurité → Mode développeur** (l'iPhone redémarre) ;
    - faites confiance à votre identifiant dans **Réglages → Général → VPN et gestion de l'appareil**.
+3. **Ajouter la source Enora** : dans SideStore, ouvrez **Sources → +** et collez :
+   ```
+   https://github.com/Geld237/sonora/releases/latest/download/enora-source.json
+   ```
+   Ouvrez Enora dans la source et touchez **Installer**.
+4. **Mises à jour** : chaque nouvelle version apparaît dans l'onglet **Mises à jour** de SideStore. Touchez **Mettre à jour** ; vos données sont conservées.
+5. **Tous les 7 jours** (identifiant Apple gratuit) : ouvrez SideStore et touchez **Actualiser tout**, LocalDevVPN activé. Aucun ordinateur n'est nécessaire. Limite Apple : 3 apps installées de cette façon en même temps.
 
-Avec un identifiant Apple gratuit, l'app fonctionne **7 jours**. Il suffit ensuite de la réinstaller avec Sideloadly.
+**Autre méthode** : installer le fichier `Enora-iPhone-x.y.z.ipa` de la page Releases avec **Sideloadly** depuis l'ordinateur, mais il faut alors le rebrancher pour chaque mise à jour et tous les 7 jours.
 
 ---
 
@@ -194,7 +205,7 @@ Avec un identifiant Apple gratuit, l'app fonctionne **7 jours**. Il suffit ensui
    - `Enora-Setup-x.y.z.exe` et `Enora-Portable-x.y.z.exe` (Windows)
    - `Enora-Android-x.y.z.apk` (Android, à installer directement)
    - `Enora-PlayStore-x.y.z.aab` (pour la Google Play Console)
-   - `Enora-iPhone-x.y.z.ipa` (iPhone, avec Sideloadly)
+   - `Enora-iPhone-x.y.z.ipa` (iPhone) et `enora-source.json` (source SideStore)
 
 ## Mises à jour
 
@@ -206,12 +217,13 @@ Pour publier une mise à jour, relancez **Release** avec un numéro plus grand (
 | Windows portable | Enora affiche « Nouvelle version », un clic télécharge la nouvelle version |
 | Android (APK GitHub) | Enora affiche « Nouvelle version », un clic télécharge l'APK, il suffit de l'ouvrir pour l'installer |
 | Android (Play Store) | Automatique, par le Play Store (envoyez le nouveau `.aab` dans la Play Console) |
+| iPhone (SideStore) | La mise à jour apparaît dans SideStore, bouton « Mettre à jour » (source `enora-source.json`) |
 | iPhone (Sideloadly) | Enora affiche « Nouvelle version » : téléchargez le nouveau `.ipa` et réinstallez-le avec Sideloadly |
 
 ## iPhone depuis GitHub
 
 Apple ne permet pas d'installer une application directement depuis GitHub ou depuis un site. Il y a deux façons de faire :
-- **Gratuit** : téléchargez `Enora-iPhone-x.y.z.ipa` depuis la page Releases, puis installez-le avec **Sideloadly** depuis Windows (voir plus haut). L'app doit être réinstallée tous les 7 jours avec un identifiant Apple gratuit.
+- **Gratuit** : avec **SideStore** et la source Enora (voir plus haut), les mises à jour arrivent directement sur l'iPhone ; il faut seulement actualiser dans SideStore tous les 7 jours.
 - **App Store ou TestFlight** : il faut un compte Apple Developer (99 $/an), et l'onglet YouTube sans pub doit être retiré (règles d'Apple).
 
 ## Publier sur le Play Store

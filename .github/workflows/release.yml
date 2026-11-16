@@ -54,7 +54,7 @@ jobs:
             - **Mac** (Intel et Apple Silicon) : `Enora-Mac-${{ steps.v.outputs.version }}.dmg` — 1er lancement : clic droit sur Enora > Ouvrir
             - **Linux** : `Enora-Linux-${{ steps.v.outputs.version }}.AppImage` (mises à jour automatiques) ou `.deb`
             - **Android** : `Enora-Android-${{ steps.v.outputs.version }}.apk` (autorisez « Installer des applis inconnues »)
-            - **iPhone** : `Enora-iPhone-${{ steps.v.outputs.version }}.ipa`, à installer avec Sideloadly depuis Windows (voir README)
+            - **iPhone** : `Enora-iPhone-${{ steps.v.outputs.version }}.ipa`, à installer avec SideStore ; mises à jour automatiques avec la source `https://github.com/${{ github.repository }}/releases/latest/download/enora-source.json` (voir README)
             - **Play Store** : `Enora-PlayStore-${{ steps.v.outputs.version }}.aab`, à envoyer dans la Google Play Console
             - **Version web (PWA)** : https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ (iPhone : Safari > Partager > Sur l'écran d'accueil)
 
@@ -220,8 +220,12 @@ jobs:
           mkdir -p Payload
           cp -R build/Build/Products/Release-iphoneos/App.app Payload/
           zip -qry "../../Enora-iPhone-${{ needs.prepare.outputs.version }}.ipa" Payload
+      - name: Source SideStore / AltStore (mises à jour sur iPhone)
+        run: node scripts/make-altsource.js "${{ needs.prepare.outputs.version }}" "Enora-iPhone-${{ needs.prepare.outputs.version }}.ipa" "${{ github.run_number }}"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
-          files: Enora-iPhone-*.ipa
+          files: |
+            Enora-iPhone-*.ipa
+            enora-source.json
 
